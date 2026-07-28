@@ -1,0 +1,1 @@
+"""SchoolWorkHub API package."""
