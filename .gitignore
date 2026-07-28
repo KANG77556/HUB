@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Node
+node_modules/
+dist/
+build/
+
+# .NET
+bin/
+obj/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pfx
+*.key
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime data
+.data/
+logs/
+backups/
