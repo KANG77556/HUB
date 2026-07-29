@@ -21,4 +21,12 @@ public partial class MainWindow : Window
             _viewModel.SetAdminPassword(passwordBox.Password);
         }
     }
+
+    private void LoginPassword_OnPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            _viewModel.SetLoginPassword(passwordBox.Password);
+        }
+    }
 }
