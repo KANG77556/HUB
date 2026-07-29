@@ -64,6 +64,25 @@ jobs:
           echo '92a22d23201b2fbb9101af95d99f388f56c85a068666a4d079e494454f25eecf  /tmp/android-app-v0.6.0.zip' | sha256sum -c -
           unzip -q /tmp/android-app-v0.6.0.zip -d workspace
 
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('workspace/android-app/app/src/main/java/kr/co/assistant/localai/LiteRtLmAnalyzer.kt')
+          source = path.read_text()
+          old = '''                val raw = activeEngine.createConversation(config).use { conversation ->
+                      conversation.sendMessage(buildPrompt(text, context)).text
+                  }
+          '''
+          new = '''                val conversation = activeEngine.createConversation(config)
+                  val raw = try {
+                      conversation.sendMessage(buildPrompt(text, context)).toString()
+                  } finally {
+                      conversation.close()
+                  }
+          '''
+          assert old in source
+          path.write_text(source.replace(old, new))
+          PY
+
       - name: Run Android unit tests
         working-directory: workspace/android-app
         run: gradle --no-daemon testDebugUnitTest
