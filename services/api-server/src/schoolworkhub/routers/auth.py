@@ -25,7 +25,6 @@ from schoolworkhub.security import (
 )
 from schoolworkhub.settings import get_settings
 
-
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 bearer_scheme = HTTPBearer(auto_error=False)
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
