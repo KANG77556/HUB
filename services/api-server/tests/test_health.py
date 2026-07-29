@@ -11,7 +11,7 @@ def test_liveness() -> None:
     assert response.json() == {
         "status": "ok",
         "service": "api",
-        "version": "0.2.0",
+        "version": "0.3.0",
     }
 
 
