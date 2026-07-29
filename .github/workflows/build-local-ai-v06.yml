@@ -35,7 +35,11 @@ jobs:
       - name: Restore and verify Android project
         run: |
           mkdir -p workspace
-          cat source-v06/part-*.b64 | tr -d '[:space:]' | base64 -d > /tmp/android-app-v0.6.0.zip
+          for file in source-v06/part-{00..07}.b64; do
+            printf '%s ' "$file"
+            tr -d '[:space:]' < "$file" | sha256sum | cut -d' ' -f1
+          done
+          cat source-v06/part-{00..07}.b64 | tr -d '[:space:]' | base64 -d > /tmp/android-app-v0.6.0.zip
           echo '92a22d23201b2fbb9101af95d99f388f56c85a068666a4d079e494454f25eecf  /tmp/android-app-v0.6.0.zip' | sha256sum -c -
           unzip -q /tmp/android-app-v0.6.0.zip -d workspace
 
