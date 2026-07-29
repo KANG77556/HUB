@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using SchoolWorkHub.ServerManager.Infrastructure;
@@ -92,9 +93,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         await RunBusyAsync(async () =>
         {
             using var client = new SchoolWorkHubApiClient(ApiBaseUrl);
-            var health = await client.CheckHealthAsync();
-            LiveStatus = $"{health.Live.Status} · API {health.Live.Version}";
-            ReadyStatus = health.Ready.Status;
+            await UpdateHealthAsync(client);
             StatusMessage = "서버와 데이터베이스가 정상적으로 응답했습니다.";
         });
     }
@@ -126,10 +125,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     AdminUsername.Trim(),
                     AdminDisplayName.Trim(),
                     _adminPassword));
+            await UpdateHealthAsync(client);
             StatusMessage =
                 $"초기 설정 완료 · 학교 {response.SchoolId} · 관리자 {response.AdminUserId}";
-            await CheckConnectionAsync();
         });
+    }
+
+    private async Task UpdateHealthAsync(SchoolWorkHubApiClient client)
+    {
+        var health = await client.CheckHealthAsync();
+        LiveStatus = $"{health.Live.Status} · API {health.Live.Version}";
+        ReadyStatus = health.Ready.Status;
     }
 
     private async Task RunBusyAsync(Func<Task> action)
