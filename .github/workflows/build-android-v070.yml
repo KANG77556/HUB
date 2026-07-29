@@ -1,8 +1,8 @@
-name: Build Android AI Assistant v0.7.0
+name: Build Android AI Assistant v0.8.0
 
 on:
   push:
-    branches: [apk-build-v0.7.0]
+    branches: [apk-build-v0.8.0-public]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
-      - name: Restore and verify v0.7.0 source
+      - name: Restore verified v0.7.0 source
         run: |
           cat source-v07/part-*.b64 | tr -d '[:space:]' | base64 -d > /tmp/android-ai-assistant-v0.7.0.tar.xz
           echo '8b1a24932de2f406ebb9ea439ae79d145cf6eb64ee8692722b27add9d3ee0a16  /tmp/android-ai-assistant-v0.7.0.tar.xz' | sha256sum -c -
@@ -45,6 +45,16 @@ jobs:
           path.write_text(source.replace(old, new))
           PY
 
+      - name: Verify and apply v0.8.0 patch
+        run: |
+          tr -d '[:space:]' < source-v08/changes-v070-to-v080.patch.xz.b64 | base64 -d > /tmp/changes-v070-to-v080.patch.xz
+          echo '6bb43b8c6067718998d6ed99f8a2cb74aaa0c19879456728835d24ce2422c02e  /tmp/changes-v070-to-v080.patch.xz' | sha256sum -c -
+          xz -dc /tmp/changes-v070-to-v080.patch.xz > /tmp/changes-v070-to-v080.patch
+          cd workspace/android-ai-assistant
+          git apply --check /tmp/changes-v070-to-v080.patch
+          git apply /tmp/changes-v070-to-v080.patch
+          grep -q 'versionName = "0.8.0"' android-app/app/build.gradle.kts
+
       - name: Run Android unit tests
         working-directory: workspace/android-ai-assistant/android-app
         run: gradle --no-daemon testDebugUnitTest
@@ -58,16 +68,16 @@ jobs:
           APK='workspace/android-ai-assistant/android-app/app/build/outputs/apk/debug/app-debug.apk'
           test -f "$APK"
           unzip -t "$APK" >/dev/null
-          cp "$APK" Android-AI-Assistant-v0.7.0-model-safe-debug.apk
-          sha256sum Android-AI-Assistant-v0.7.0-model-safe-debug.apk | tee Android-AI-Assistant-v0.7.0-model-safe-debug-SHA256.txt
-          ls -lh Android-AI-Assistant-v0.7.0-model-safe-debug.apk
+          cp "$APK" Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk
+          sha256sum Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk | tee Android-AI-Assistant-v0.8.0-reminders-calendar-debug-SHA256.txt
+          ls -lh Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Android-AI-Assistant-v0.7.0-model-safe-debug
+          name: Android-AI-Assistant-v0.8.0-reminders-calendar-debug
           path: |
-            Android-AI-Assistant-v0.7.0-model-safe-debug.apk
-            Android-AI-Assistant-v0.7.0-model-safe-debug-SHA256.txt
+            Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk
+            Android-AI-Assistant-v0.8.0-reminders-calendar-debug-SHA256.txt
           if-no-files-found: error
           retention-days: 7
