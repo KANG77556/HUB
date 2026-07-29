@@ -1,0 +1,40 @@
+<Application x:Class="SchoolWorkHub.ServerManager.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <Color x:Key="PrimaryBlue">#145DBF</Color>
+    <Color x:Key="PrimaryBlueDark">#0C438F</Color>
+    <Color x:Key="SurfaceBlue">#EEF5FF</Color>
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryBlue}" />
+    <SolidColorBrush x:Key="PrimaryDarkBrush" Color="{StaticResource PrimaryBlueDark}" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceBlue}" />
+
+    <Style TargetType="Window">
+      <Setter Property="FontFamily" Value="Malgun Gothic" />
+      <Setter Property="Background" Value="#F5F7FB" />
+      <Setter Property="Foreground" Value="#1E293B" />
+    </Style>
+
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="18,10" />
+      <Setter Property="Margin" Value="0,6,8,6" />
+      <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style TargetType="TextBox">
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="Margin" Value="0,4,0,12" />
+      <Setter Property="BorderBrush" Value="#CBD5E1" />
+    </Style>
+
+    <Style TargetType="PasswordBox">
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="Margin" Value="0,4,0,12" />
+      <Setter Property="BorderBrush" Value="#CBD5E1" />
+    </Style>
+  </Application.Resources>
+</Application>
