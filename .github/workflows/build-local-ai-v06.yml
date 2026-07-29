@@ -68,19 +68,18 @@ jobs:
           from pathlib import Path
           path = Path('workspace/android-app/app/src/main/java/kr/co/assistant/localai/LiteRtLmAnalyzer.kt')
           source = path.read_text()
-          old = '''                val raw = activeEngine.createConversation(config).use { conversation ->
-                      conversation.sendMessage(buildPrompt(text, context)).text
-                  }
-          '''
-          new = '''                val conversation = activeEngine.createConversation(config)
+          start_marker = '                val raw = activeEngine.createConversation(config).use { conversation ->'
+          end_marker = '                parser.parse(raw, text, context)'
+          start = source.index(start_marker)
+          end = source.index(end_marker, start)
+          replacement = '''                val conversation = activeEngine.createConversation(config)
                   val raw = try {
                       conversation.sendMessage(buildPrompt(text, context)).toString()
                   } finally {
                       conversation.close()
                   }
           '''
-          assert old in source
-          path.write_text(source.replace(old, new))
+          path.write_text(source[:start] + replacement + source[end:])
           PY
 
       - name: Run Android unit tests
