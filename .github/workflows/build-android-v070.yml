@@ -50,14 +50,13 @@ jobs:
           tr -d '[:space:]' < source-v08/changes-v070-to-v080.patch.xz.b64 | base64 -d > /tmp/changes-v070-to-v080.patch.xz
           echo '6bb43b8c6067718998d6ed99f8a2cb74aaa0c19879456728835d24ce2422c02e  /tmp/changes-v070-to-v080.patch.xz' | sha256sum -c -
           xz -dc /tmp/changes-v070-to-v080.patch.xz > /tmp/changes-v070-to-v080.patch
-          cd workspace/android-ai-assistant
           echo 'Checking patch...'
-          git apply --check --verbose /tmp/changes-v070-to-v080.patch
+          git apply --check --verbose --directory=workspace/android-ai-assistant /tmp/changes-v070-to-v080.patch
           echo 'Applying patch...'
-          git apply --verbose /tmp/changes-v070-to-v080.patch
+          git apply --verbose --directory=workspace/android-ai-assistant /tmp/changes-v070-to-v080.patch
           python3 - <<'PY'
           from pathlib import Path
-          content = Path('android-app/app/build.gradle.kts').read_text()
+          content = Path('workspace/android-ai-assistant/android-app/app/build.gradle.kts').read_text()
           assert 'versionCode = 8' in content
           assert 'versionName = "0.8.0"' in content
           print('v0.8.0 patch verification passed')
