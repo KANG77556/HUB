@@ -4,22 +4,20 @@ from schoolworkhub.main import create_app
 
 
 def test_liveness() -> None:
-    client = TestClient(create_app())
-
-    response = client.get("/health/live")
+    with TestClient(create_app()) as client:
+        response = client.get("/health/live")
 
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
         "service": "api",
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
 
 
 def test_readiness() -> None:
-    client = TestClient(create_app())
-
-    response = client.get("/health/ready")
+    with TestClient(create_app()) as client:
+        response = client.get("/health/ready")
 
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
