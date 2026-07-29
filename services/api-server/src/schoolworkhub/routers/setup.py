@@ -10,7 +10,6 @@ from schoolworkhub.models import Permission, Role, RolePermission, School, User,
 from schoolworkhub.schemas import BootstrapRequest, BootstrapResponse
 from schoolworkhub.security import hash_password
 
-
 router = APIRouter(prefix="/api/v1/setup", tags=["setup"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
