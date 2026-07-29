@@ -2,12 +2,11 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-import jwt
 
 from schoolworkhub.settings import get_settings
-
 
 password_hasher = PasswordHasher()
 
