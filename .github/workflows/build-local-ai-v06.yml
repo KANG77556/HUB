@@ -21,6 +21,14 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Upload source chunks for diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-ai-v06-source-chunks
+          path: source-v06/part-*.b64
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
