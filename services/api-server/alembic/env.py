@@ -9,7 +9,6 @@ from schoolworkhub import models  # noqa: F401
 from schoolworkhub.db.base import Base
 from schoolworkhub.settings import get_settings
 
-
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
