@@ -21,14 +21,6 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Upload source chunks for diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: local-ai-v06-source-chunks
-          path: source-v06/part-*.b64
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -40,13 +32,34 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
-      - name: Restore and verify Android project
+      - name: Repair, restore and verify Android project
         run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import zlib
+          from pathlib import Path
+
+          encoded = ''.join(
+              Path(f'source-v06/repair-{index:02d}.b64').read_text().split()
+              for index in range(3)
+          )
+          compressed = base64.b64decode(encoded)
+          assert hashlib.sha256(compressed).hexdigest() == '13e5266b23dcf613dae6bf7d4445b0bdb8ef1079bbc13c14098af8f6b630305e'
+          patch = json.loads(zlib.decompress(compressed))
+
+          for key, spec in patch.items():
+              path = Path(f'source-v06/part-{key}.b64')
+              current = ''.join(path.read_text().split())
+              assert hashlib.sha256(current.encode()).hexdigest() == spec['remote_sha'], key
+              for start, end, replacement in reversed(spec['ops']):
+                  current = current[:start] + replacement + current[end:]
+              assert hashlib.sha256(current.encode()).hexdigest() == spec['target_sha'], key
+              path.write_text(current)
+          PY
+
           mkdir -p workspace
-          for file in source-v06/part-{00..07}.b64; do
-            printf '%s ' "$file"
-            tr -d '[:space:]' < "$file" | sha256sum | cut -d' ' -f1
-          done
           cat source-v06/part-{00..07}.b64 | tr -d '[:space:]' | base64 -d > /tmp/android-app-v0.6.0.zip
           echo '92a22d23201b2fbb9101af95d99f388f56c85a068666a4d079e494454f25eecf  /tmp/android-app-v0.6.0.zip' | sha256sum -c -
           unzip -q /tmp/android-app-v0.6.0.zip -d workspace
