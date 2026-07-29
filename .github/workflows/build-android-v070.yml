@@ -35,6 +35,15 @@ jobs:
           echo '8b1a24932de2f406ebb9ea439ae79d145cf6eb64ee8692722b27add9d3ee0a16  /tmp/android-ai-assistant-v0.7.0.tar.xz' | sha256sum -c -
           mkdir -p workspace
           tar -xJf /tmp/android-ai-assistant-v0.7.0.tar.xz -C workspace
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('workspace/android-ai-assistant/android-app/app/src/main/java/kr/co/assistant/localai/model/LocalModelManager.kt')
+          source = path.read_text()
+          old = 'preferences.getString(KEY_WORK_ID, null)?.let { runCatching(UUID::fromString).getOrNull() } ?: return null'
+          new = 'preferences.getString(KEY_WORK_ID, null)?.let { value -> runCatching { UUID.fromString(value) }.getOrNull() } ?: return null'
+          assert old in source
+          path.write_text(source.replace(old, new))
+          PY
 
       - name: Run Android unit tests
         working-directory: workspace/android-ai-assistant/android-app
