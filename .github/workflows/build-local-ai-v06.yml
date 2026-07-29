@@ -42,7 +42,7 @@ jobs:
           from pathlib import Path
 
           encoded = ''.join(
-              Path(f'source-v06/repair-{index:02d}.b64').read_text().split()
+              ''.join(Path(f'source-v06/repair-{index:02d}.b64').read_text().split())
               for index in range(3)
           )
           compressed = base64.b64decode(encoded)
