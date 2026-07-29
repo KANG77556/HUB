@@ -16,6 +16,24 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: schoolworkhub_test
+          POSTGRES_USER: schoolworkhub
+          POSTGRES_PASSWORD: schoolworkhub-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U schoolworkhub -d schoolworkhub_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SWH_DATABASE_URL: postgresql+asyncpg://schoolworkhub:schoolworkhub-test@127.0.0.1:5432/schoolworkhub_test
+      SWH_SECRET_KEY: ci-only-secret-key-with-at-least-32-characters
+      SWH_ENVIRONMENT: test
     defaults:
       run:
         working-directory: services/api-server
@@ -28,6 +46,8 @@ jobs:
           cache-dependency-path: services/api-server/pyproject.toml
       - name: Install
         run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+      - name: Migrate database
+        run: alembic upgrade head
       - name: Lint
         run: ruff check .
       - name: Type check
