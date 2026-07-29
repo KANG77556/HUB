@@ -42,6 +42,10 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["schoolworkhub"]
+known-third-party = ["alembic", "argon2", "fastapi", "jwt", "pydantic", "pydantic_settings", "sqlalchemy"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
