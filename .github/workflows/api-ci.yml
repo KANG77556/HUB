@@ -49,7 +49,7 @@ jobs:
       - name: Migrate database
         run: alembic upgrade head
       - name: Lint
-        run: ruff check --diff .
+        run: ruff check .
       - name: Type check
         run: mypy
       - name: Test
