@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,3 +53,31 @@ class CurrentUserResponse(BaseModel):
     is_superuser: bool
     roles: list[str]
     permissions: list[str]
+
+
+class ServerIdentityResponse(BaseModel):
+    service: str = "schoolworkhub"
+    api_version: str = "v1"
+    school_code: str | None
+    school_name: str | None
+
+
+class DashboardMetric(BaseModel):
+    key: str
+    count: int
+
+
+class DashboardItemSummary(BaseModel):
+    id: str
+    title: str
+    status: str
+    updated_at: datetime
+
+
+class DashboardSnapshotResponse(BaseModel):
+    generated_at: datetime
+    roles: list[str]
+    permissions: list[str]
+    metrics: list[DashboardMetric]
+    schedule_items: list[DashboardItemSummary]
+    document_items: list[DashboardItemSummary]
