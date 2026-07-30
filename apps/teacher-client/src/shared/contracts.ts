@@ -49,6 +49,7 @@ export const tokenPairResponseSchema = z.object({
   expires_in_seconds: z.number().int().positive(),
   refresh_expires_in_seconds: z.number().int().positive(),
 });
+export type TokenPairResponse = z.infer<typeof tokenPairResponseSchema>;
 
 export const currentUserResponseSchema = z.object({
   id: z.string().uuid(),
@@ -62,6 +63,7 @@ export const currentUserResponseSchema = z.object({
   roles: z.array(z.string()),
   permissions: z.array(z.string()),
 });
+export type CurrentUserResponse = z.infer<typeof currentUserResponseSchema>;
 
 export const serverIdentityResponseSchema = z.object({
   service: z.literal('schoolworkhub'),
@@ -69,6 +71,7 @@ export const serverIdentityResponseSchema = z.object({
   school_code: z.string().nullable(),
   school_name: z.string().nullable(),
 });
+export type ServerIdentityResponse = z.infer<typeof serverIdentityResponseSchema>;
 
 export const dashboardResponseSchema = z.object({
   generated_at: z.string().min(1),
@@ -92,6 +95,7 @@ export const dashboardResponseSchema = z.object({
     }),
   ),
 });
+export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
 
 export const serverChangeInputSchema = z.object({
   baseUrl: z.string().url(),
