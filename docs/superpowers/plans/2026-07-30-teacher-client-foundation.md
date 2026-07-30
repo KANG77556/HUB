@@ -4,26 +4,26 @@
 
 **Goal:** 로그인, 자동 세션 복구, 복수 역할 권한 통합 대시보드, DPAPI 보호 오프라인 읽기 전용 캐시, TLS 인증서 지문 고정과 보호된 서버 변경이 실제 API와 연동되는 Windows Electron 교사용 클라이언트를 만든다.
 
-**Architecture:** FastAPI 서버는 짧은 수명의 액세스 토큰과 회전형 갱신 토큰, 서버 식별 응답, 대시보드 스냅샷을 제공한다. Electron 메인 프로세스가 네트워크, 토큰, Windows 자격 증명 관리자, DPAPI, SQLite, 인증서 검증을 독점하고, 프리로드는 고정된 타입의 IPC만 React 렌더러에 노출한다.
+**Architecture:** FastAPI는 15분 액세스 토큰과 회전형 30일 갱신 토큰, 서버 식별 응답, 대시보드 스냅샷을 제공한다. Electron 메인 프로세스가 네트워크, 토큰, Windows 자격 증명 관리자, DPAPI, SQLite, 인증서 검증을 독점하고, 프리로드는 고정된 타입의 IPC만 React 렌더러에 노출한다.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2, PostgreSQL 16, Alembic, Electron 43.2.0, Node.js 24, React 19, TypeScript 5.7, Vite 6, Zod 4.4.3, `@github/keytar` 7.10.6, `better-sqlite3` 13.0.1, Vitest 4.1.10, Windows Credential Manager, Electron `safeStorage`/Windows DPAPI.
 
 ## Global Constraints
 
-- 액세스 토큰 수명은 정확히 15분이며 Electron 메인 프로세스 메모리에만 존재한다.
+- 액세스 토큰 수명은 정확히 15분이며 Electron 메인 프로세스 메모리에만 둔다.
 - 갱신 토큰 수명은 정확히 30일이며 Windows 자격 증명 관리자에만 저장한다.
-- 로그인과 갱신은 갱신 토큰을 회전하며 서버에는 토큰 원문이 아니라 SHA-256 해시만 저장한다.
-- 렌더러에는 토큰, 서버 설정 파일 경로, 인증서 원문, 원시 IPC 객체를 전달하지 않는다.
+- 서버에는 갱신 토큰 원문 대신 SHA-256 해시만 저장하고 갱신 때마다 토큰을 회전한다.
+- 렌더러에는 토큰, 서버 정책 파일 경로, 인증서 원문, 원시 IPC 객체를 전달하지 않는다.
 - `BrowserWindow`는 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`를 사용한다.
 - 오프라인 캐시는 최근 30일의 대시보드·일정·문서 목록·제출 요약·권한 스냅샷만 저장한다.
 - 문서 본문, 첨부파일, 비밀번호, 액세스 토큰, 갱신 토큰은 캐시에 저장하지 않는다.
 - 오프라인 상태에서는 모든 생성·수정·제출 동작을 차단하고 조회만 허용한다.
-- TLS 연결은 Chromium 기본 체인·호스트 검증이 `OK`인 경우에만 현재 또는 다음 SHA-256 지문을 추가 검증한다.
-- 인증서 지문 불일치 시 오프라인 캐시를 포함한 업무 화면 전체를 차단한다.
-- 서버 주소 변경은 관리자 인증, 서버 식별, API 버전, 인증서 지문 시험 연결이 모두 성공한 후 원자적으로 저장한다.
+- Chromium의 인증서 체인·호스트 검증 결과가 `OK`일 때만 현재 또는 다음 SHA-256 지문을 추가 검증한다.
+- 인증서 지문이 맞지 않으면 오프라인 캐시를 포함한 모든 업무 화면을 차단한다.
+- 서버 주소 변경은 관리자 인증, 서버 식별, API 버전, 지문 시험 연결이 모두 성공한 후 원자적으로 저장한다.
 - 로그아웃, 갱신 토큰 거부, 계정 비활성화 시 갱신 토큰과 해당 사용자 캐시를 즉시 삭제한다.
-- API 코드는 Ruff와 strict mypy를 통과해야 한다.
-- 클라이언트 코드는 TypeScript strict, ESLint, Vitest, Windows CI를 통과해야 한다.
+- API는 Ruff와 strict mypy를 통과해야 한다.
+- 클라이언트는 TypeScript strict, ESLint, Vitest, Windows CI를 통과해야 한다.
 
 ## File Structure Map
 
@@ -34,20 +34,18 @@
 - `services/api-server/src/schoolworkhub/refresh_sessions.py`: 갱신 세션 발급, 회전, 폐기.
 - `services/api-server/src/schoolworkhub/schemas.py`: 인증, 서버 식별, 대시보드 응답 계약.
 - `services/api-server/src/schoolworkhub/routers/auth.py`: 로그인, 갱신, 로그아웃, 현재 사용자.
-- `services/api-server/src/schoolworkhub/routers/system.py`: 서버 신원과 API 호환성 응답.
+- `services/api-server/src/schoolworkhub/routers/system.py`: 서버 신원과 API 버전 응답.
 - `services/api-server/src/schoolworkhub/routers/dashboard.py`: 권한 통합 대시보드 스냅샷.
 - `services/api-server/alembic/versions/0002_refresh_sessions.py`: 갱신 세션 테이블.
-- `services/api-server/tests/test_refresh_sessions.py`: 회전·폐기·만료 통합 테스트.
-- `services/api-server/tests/test_dashboard.py`: 역할 합집합과 스냅샷 테스트.
 
 ### Electron main and preload
 
 - `apps/teacher-client/src/shared/contracts.ts`: IPC와 API 공유 타입·Zod 스키마.
-- `apps/teacher-client/src/shared/errors.ts`: 사용자 오류 분류.
+- `apps/teacher-client/src/shared/errors.ts`: 공개 오류 분류.
 - `apps/teacher-client/src/main/index.ts`: 앱 시작과 보안 BrowserWindow.
 - `apps/teacher-client/src/main/ipc/registerIpc.ts`: 고정 IPC 핸들러.
 - `apps/teacher-client/src/main/security/credentialStore.ts`: Windows Credential Manager 어댑터.
-- `apps/teacher-client/src/main/security/cacheCrypto.ts`: AES-256-GCM 데이터 암호화와 DPAPI 키 보호.
+- `apps/teacher-client/src/main/security/cacheCrypto.ts`: AES-256-GCM 암호화와 DPAPI 키 보호.
 - `apps/teacher-client/src/main/security/windowsIdentity.ts`: Windows SID 조회.
 - `apps/teacher-client/src/main/config/serverPolicy.ts`: 서버 주소와 현재·다음 지문 정책.
 - `apps/teacher-client/src/main/network/certificatePinning.ts`: TLS 체인·호스트·지문 검증.
@@ -56,10 +54,12 @@
 - `apps/teacher-client/src/main/storage/cacheRepository.ts`: 암호화 SQLite 스냅샷 저장소.
 - `apps/teacher-client/src/main/sync/syncService.ts`: 온라인·오프라인·재연결 상태와 증분 동기화.
 - `apps/teacher-client/src/main/settings/serverChangeService.ts`: 관리자 보호 서버 변경.
+- `apps/teacher-client/src/main/scripts/windowsSecuritySmoke.ts`: Windows Credential Manager와 DPAPI 실제 점검.
 - `apps/teacher-client/src/preload/index.ts`: 제한된 `contextBridge` API.
 
 ### React renderer
 
+- `apps/teacher-client/index.html`: Vite HTML 진입점.
 - `apps/teacher-client/src/renderer/main.tsx`: React 진입점.
 - `apps/teacher-client/src/renderer/App.tsx`: 상태별 최상위 화면 전환.
 - `apps/teacher-client/src/renderer/state/useAppController.ts`: IPC 기반 앱 상태 조정.
@@ -73,11 +73,11 @@
 
 ---
 
-### Task 1: Restore a Green Baseline and Upgrade the Electron Toolchain
+### Task 1: Restore a Green Baseline and Prepare the Toolchains
 
 **Files:**
 - Modify: `services/api-server/src/schoolworkhub/routers/admin.py:1-32`
-- Modify: `services/api-server/pyproject.toml:7-10`
+- Modify: `services/api-server/pyproject.toml`
 - Modify: `apps/teacher-client/package.json`
 - Modify: `apps/teacher-client/tsconfig.main.json`
 - Modify: `apps/teacher-client/tsconfig.renderer.json`
@@ -87,53 +87,49 @@
 
 **Interfaces:**
 - Consumes: 현재 API와 Electron 설정.
-- Produces: API CI가 통과하는 기준점과 `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` 명령.
+- Produces: `ruff`, `mypy`, `pytest`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` 기준점.
 
-- [ ] **Step 1: Reproduce the existing API lint failure**
-
-Run:
+- [ ] **Step 1: Reproduce and fix the current API lint failure**
 
 ```bash
 cd services/api-server
 ruff check src/schoolworkhub/routers/admin.py
-```
-
-Expected: import-order failure in `routers/admin.py`.
-
-- [ ] **Step 2: Apply Ruff's deterministic import order**
-
-Run:
-
-```bash
-cd services/api-server
 ruff check src/schoolworkhub/routers/admin.py --fix
 ruff check .
 ```
 
-Expected: both commands exit with code 0.
+Expected: 첫 명령은 import-order 오류를 재현하고 마지막 명령은 code 0으로 끝난다.
 
-- [ ] **Step 3: Align the API package version with the current application version**
+- [ ] **Step 2: Align API metadata and async test support**
 
-Change:
+Set the project version to `0.3.0`, keep Python `>=3.12,<3.13`, and add this development dependency:
 
 ```toml
-[project]
-name = "schoolworkhub-api"
-version = "0.3.0"
+"pytest-asyncio>=0.25,<1.0",
+```
+
+Add:
+
+```toml
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --disable-warnings"
+asyncio_mode = "auto"
 ```
 
 Run:
 
 ```bash
-cd services/api-server
-mypy && pytest
+mypy
+pytest
 ```
 
-Expected: strict type check and existing tests pass.
+Expected: existing checks pass.
 
-- [ ] **Step 4: Replace the teacher-client scripts and dependency set**
+- [ ] **Step 3: Replace the teacher-client scripts and dependencies**
 
-Use these package entries:
+Preserve `name`, `version`, `private`, and `type`, then use:
 
 ```json
 {
@@ -159,6 +155,7 @@ Use these package entries:
   },
   "devDependencies": {
     "@electron/rebuild": "4.2.0",
+    "@eslint/js": "9.39.2",
     "@testing-library/jest-dom": "6.8.0",
     "@testing-library/react": "16.3.0",
     "@types/better-sqlite3": "7.6.13",
@@ -176,11 +173,9 @@ Use these package entries:
 }
 ```
 
-Preserve `name`, `version`, `private`, and `type` from the existing file.
+- [ ] **Step 4: Expand the TypeScript compilation roots**
 
-- [ ] **Step 5: Expand the Electron TypeScript compilation roots**
-
-Set `tsconfig.main.json` to compile main, preload, and shared code:
+`tsconfig.main.json`:
 
 ```json
 {
@@ -201,9 +196,13 @@ Set `tsconfig.main.json` to compile main, preload, and shared code:
 }
 ```
 
-Add `src/shared` and `src/test` to `tsconfig.renderer.json`'s `include` array.
+Keep the current renderer compiler options and set its include list to:
 
-- [ ] **Step 6: Add ESLint and Vitest configuration**
+```json
+["src/renderer", "src/shared", "src/test", "vite.config.ts", "vitest.config.ts"]
+```
+
+- [ ] **Step 5: Add ESLint and Vitest configuration**
 
 `eslint.config.js`:
 
@@ -227,8 +226,6 @@ export default tseslint.config(
 );
 ```
 
-Add `@eslint/js` version `9.39.2` to dev dependencies.
-
 `vitest.config.ts`:
 
 ```ts
@@ -249,22 +246,14 @@ export default defineConfig({
 import '@testing-library/jest-dom/vitest';
 ```
 
-- [ ] **Step 7: Install and verify the empty toolchain**
-
-Run:
+- [ ] **Step 6: Install, verify, and commit**
 
 ```bash
 cd apps/teacher-client
 npm install
 npm run lint
 npm run typecheck
-```
 
-Expected: installation succeeds and the commands exit with code 0 before feature files are added.
-
-- [ ] **Step 8: Commit**
-
-```bash
 git add services/api-server apps/teacher-client
 git commit -m "chore: prepare teacher client toolchain"
 ```
@@ -280,12 +269,9 @@ git commit -m "chore: prepare teacher client toolchain"
 - Create: `services/api-server/tests/test_refresh_sessions.py`
 
 **Interfaces:**
-- Consumes: `User`, `School`, `AsyncSession`, application secret settings.
-- Produces: `issue_refresh_session(session, user) -> IssuedRefreshSession`, `rotate_refresh_session(session, raw_token) -> tuple[User, IssuedRefreshSession]`, `revoke_refresh_session(session, raw_token) -> bool`.
+- Produces: `issue_refresh_session(session, user)`, `rotate_refresh_session(session, raw_token)`, `revoke_refresh_session(session, raw_token)`.
 
 - [ ] **Step 1: Write failing token-helper tests**
-
-Add:
 
 ```python
 from schoolworkhub.security import generate_refresh_token, hash_refresh_token
@@ -300,29 +286,24 @@ def test_refresh_token_is_random_and_hash_is_stable() -> None:
     assert hash_refresh_token(first) != hash_refresh_token(second)
 ```
 
-Run:
-
 ```bash
 cd services/api-server
 pytest tests/test_refresh_sessions.py::test_refresh_token_is_random_and_hash_is_stable -v
 ```
 
-Expected: FAIL because the functions do not exist.
+Expected: missing-function failure.
 
 - [ ] **Step 2: Add exact token settings and helpers**
-
-Set:
 
 ```python
 access_token_ttl_minutes: int = 15
 refresh_token_ttl_days: int = 30
 ```
 
-Add to `security.py`:
-
 ```python
 import hashlib
 import secrets
+from uuid import uuid4
 
 
 def generate_refresh_token() -> str:
@@ -333,11 +314,9 @@ def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 ```
 
-Run the single test again; expect PASS.
+Add `"jti": str(uuid4())` to every access-token payload so two tokens issued in the same second remain distinct.
 
-- [ ] **Step 3: Add the refresh-session SQLAlchemy model**
-
-Add:
+- [ ] **Step 3: Add the model and migration**
 
 ```python
 class RefreshSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -355,24 +334,9 @@ class RefreshSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 ```
 
-- [ ] **Step 4: Write migration `0002_refresh_sessions.py`**
+Migration revision is `0002_refresh_sessions`, down revision is `0001_identity_rbac`, and downgrade removes indexes before the table.
 
-Create the table with UUID primary key, `created_at`, `updated_at`, foreign keys with `CASCADE`, unique `token_hash`, and indexes for `user_id`, `school_id`, `token_hash`, and `expires_at`. Set `down_revision = "0001_identity_rbac"`. The downgrade drops indexes before dropping the table.
-
-Run:
-
-```bash
-cd services/api-server
-alembic upgrade head
-alembic downgrade 0001_identity_rbac
-alembic upgrade head
-```
-
-Expected: all three commands succeed.
-
-- [ ] **Step 5: Write failing issue/rotate/revoke integration tests**
-
-Use a real PostgreSQL test session and assert:
+- [ ] **Step 4: Write failing service tests**
 
 ```python
 issued = await issue_refresh_session(session, user)
@@ -390,11 +354,7 @@ assert await revoke_refresh_session(session, rotated.raw_token) is True
 assert await revoke_refresh_session(session, rotated.raw_token) is False
 ```
 
-Run the test and expect import failures.
-
-- [ ] **Step 6: Implement the refresh-session service**
-
-Define:
+- [ ] **Step 5: Implement transactional issue, rotation, and revocation**
 
 ```python
 @dataclass(frozen=True)
@@ -407,22 +367,18 @@ class RefreshSessionRejected(ValueError):
     pass
 ```
 
-`issue_refresh_session` creates a random token, stores only its hash, and flushes. `rotate_refresh_session` selects the unrevoked hash with `with_for_update()`, rejects missing, expired, inactive-user, and school mismatch states, sets `revoked_at` and `last_used_at`, then issues a replacement. `revoke_refresh_session` returns `False` for missing or already revoked tokens.
+Rotation selects the unrevoked hash with `with_for_update()`, rejects missing, expired, inactive-user, and school-mismatch states, marks the old row revoked, then inserts the replacement in the same transaction.
 
-- [ ] **Step 7: Run API quality gates**
+- [ ] **Step 6: Verify and commit**
 
 ```bash
-cd services/api-server
+alembic upgrade head
+alembic downgrade 0001_identity_rbac
+alembic upgrade head
 ruff check .
 mypy
 pytest tests/test_refresh_sessions.py -v
-```
 
-Expected: all pass.
-
-- [ ] **Step 8: Commit**
-
-```bash
 git add services/api-server
 git commit -m "feat: add refresh session persistence"
 ```
@@ -436,12 +392,9 @@ git commit -m "feat: add refresh session persistence"
 - Modify: `services/api-server/tests/test_refresh_sessions.py`
 
 **Interfaces:**
-- Consumes: Task 2 refresh-session service.
 - Produces: `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`.
 
-- [ ] **Step 1: Update failing API expectations**
-
-Change login assertions to require:
+- [ ] **Step 1: Write failing HTTP contract tests**
 
 ```python
 body = login_response.json()
@@ -450,26 +403,17 @@ assert body["expires_in_seconds"] == 900
 assert body["refresh_expires_in_seconds"] == 2_592_000
 assert body["access_token"]
 assert body["refresh_token"]
-```
 
-Add a refresh request and assert token rotation:
-
-```python
 refresh_response = client.post(
     "/api/v1/auth/refresh",
     json={"refresh_token": body["refresh_token"]},
 )
 assert refresh_response.status_code == 200
-refreshed = refresh_response.json()
-assert refreshed["refresh_token"] != body["refresh_token"]
-assert refreshed["access_token"] != body["access_token"]
+assert refresh_response.json()["refresh_token"] != body["refresh_token"]
+assert refresh_response.json()["access_token"] != body["access_token"]
 ```
 
-Run the test and expect schema/route failures.
-
-- [ ] **Step 2: Add exact Pydantic contracts**
-
-Add:
+- [ ] **Step 2: Add exact schemas**
 
 ```python
 class TokenPairResponse(BaseModel):
@@ -488,18 +432,9 @@ class LogoutRequest(BaseModel):
     refresh_token: str = Field(min_length=32, max_length=512)
 ```
 
-Extend `CurrentUserResponse` with:
+Extend `CurrentUserResponse` with `school_name: str` and `department_names: list[str]`.
 
-```python
-school_name: str
-department_names: list[str]
-```
-
-Remove the obsolete `TokenResponse` after all references are migrated.
-
-- [ ] **Step 3: Change login to issue a token pair**
-
-After successful password verification:
+- [ ] **Step 3: Change login to issue and commit a token pair**
 
 ```python
 issued = await issue_refresh_session(session, user)
@@ -512,62 +447,30 @@ return TokenPairResponse(
 )
 ```
 
-Ensure the audit log and refresh-session insert share the same transaction.
+The success audit row and refresh session must share one transaction.
 
 - [ ] **Step 4: Add refresh and logout routes**
 
-Refresh:
+Refresh rotates once and returns a new pair. Logout always returns HTTP 204 after attempting revocation so callers cannot infer whether a token existed.
 
 ```python
-@router.post("/refresh", response_model=TokenPairResponse)
-async def refresh(payload: RefreshRequest, session: SessionDep) -> TokenPairResponse:
-    try:
-        user, issued = await rotate_refresh_session(session, payload.refresh_token)
-    except RefreshSessionRejected as exc:
-        await session.rollback()
-        raise authentication_error() from exc
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(payload: LogoutRequest, session: SessionDep) -> None:
+    await revoke_refresh_session(session, payload.refresh_token)
     await session.commit()
-    settings = get_settings()
-    return TokenPairResponse(
-        access_token=create_access_token(user.id, user.school_id),
-        refresh_token=issued.raw_token,
-        expires_in_seconds=settings.access_token_ttl_minutes * 60,
-        refresh_expires_in_seconds=settings.refresh_token_ttl_days * 24 * 60 * 60,
-    )
 ```
 
-Logout returns HTTP 204 and commits revocation even when the token was already absent, preventing token-existence disclosure.
+- [ ] **Step 5: Test reuse, expiry, deactivation, and logout**
 
-- [ ] **Step 5: Expand `/auth/me` queries**
+Assert the old token returns 401 after rotation, a logged-out token returns 401, an expired database row returns 401, and a deactivated user cannot refresh.
 
-Join `School` and optional `Department`, return one school name and zero-or-one department name while preserving deduplicated ordered roles and permissions.
-
-- [ ] **Step 6: Test revoked, expired, inactive, and reused refresh tokens**
-
-Assertions:
-
-```python
-assert client.post("/api/v1/auth/refresh", json={"refresh_token": old_token}).status_code == 401
-assert client.post("/api/v1/auth/logout", json={"refresh_token": new_token}).status_code == 204
-assert client.post("/api/v1/auth/refresh", json={"refresh_token": new_token}).status_code == 401
-```
-
-Create an expired database record directly and assert 401. Deactivate the user and assert 401 plus server-side session revocation.
-
-- [ ] **Step 7: Run complete API checks**
+- [ ] **Step 6: Verify and commit**
 
 ```bash
-cd services/api-server
 ruff check .
 mypy
 pytest --cov=schoolworkhub --cov-report=term-missing
-```
 
-Expected: all pass.
-
-- [ ] **Step 8: Commit**
-
-```bash
 git add services/api-server
 git commit -m "feat: add rotating authentication sessions"
 ```
@@ -583,17 +486,14 @@ git commit -m "feat: add rotating authentication sessions"
 - Create: `services/api-server/tests/test_dashboard.py`
 
 **Interfaces:**
-- Consumes: current-user dependency and RBAC queries.
 - Produces: `GET /api/v1/system/identity`, `GET /api/v1/dashboard`.
 
 - [ ] **Step 1: Write failing identity and dashboard tests**
 
-Assert unauthenticated identity:
+After bootstrap:
 
 ```python
-response = client.get("/api/v1/system/identity")
-assert response.status_code == 200
-assert response.json() == {
+assert client.get("/api/v1/system/identity").json() == {
     "service": "schoolworkhub",
     "api_version": "v1",
     "school_code": "sample-school",
@@ -601,9 +501,9 @@ assert response.json() == {
 }
 ```
 
-Assert dashboard rejects anonymous requests and returns the authenticated user's role/permission union.
+Assert the dashboard rejects anonymous access and returns the authenticated user's deduplicated role and permission union.
 
-- [ ] **Step 2: Add response contracts**
+- [ ] **Step 2: Add typed response contracts**
 
 ```python
 class ServerIdentityResponse(BaseModel):
@@ -618,24 +518,25 @@ class DashboardMetric(BaseModel):
     count: int
 
 
+class DashboardItemSummary(BaseModel):
+    id: str
+    title: str
+    status: str
+    updated_at: datetime
+
+
 class DashboardSnapshotResponse(BaseModel):
     generated_at: datetime
     roles: list[str]
     permissions: list[str]
     metrics: list[DashboardMetric]
-    schedule_items: list[dict[str, object]]
-    document_items: list[dict[str, object]]
+    schedule_items: list[DashboardItemSummary]
+    document_items: list[DashboardItemSummary]
 ```
 
-The first implementation returns zero counts and empty lists because schedule, document, and submission business tables are outside this sub-project. The response is still a real authenticated, cacheable API contract.
+- [ ] **Step 3: Implement identity and permission-derived metrics**
 
-- [ ] **Step 3: Implement the identity route**
-
-Query the single school row with deterministic ordering. Before bootstrap, return `school_code=None` and `school_name=None`; after bootstrap return the configured school.
-
-- [ ] **Step 4: Implement permission-derived dashboard metrics**
-
-Return only metrics whose read permission exists:
+Before bootstrap, identity returns null school fields. Dashboard includes only metrics allowed by these permissions:
 
 ```python
 metric_permissions = {
@@ -645,45 +546,35 @@ metric_permissions = {
 }
 ```
 
-Each included metric starts at count `0`. Do not expose a metric for a missing permission.
+Counts and lists begin empty because the business tables are outside this sub-project.
 
-- [ ] **Step 5: Register both routers and run tests**
+- [ ] **Step 4: Register routers, verify, and commit**
 
 ```bash
-cd services/api-server
 ruff check .
 mypy
 pytest tests/test_dashboard.py tests/test_auth.py -v
-```
 
-Expected: all pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
 git add services/api-server
 git commit -m "feat: add client bootstrap APIs"
 ```
 
-### Task 5: Define Shared Contracts and the Secure Electron Shell
+### Task 5: Define Shared Contracts and a Hardened Electron Shell
 
 **Files:**
 - Create: `apps/teacher-client/src/shared/contracts.ts`
 - Create: `apps/teacher-client/src/shared/errors.ts`
-- Create: `apps/teacher-client/src/main/index.ts`
 - Create: `apps/teacher-client/src/main/ipc/channels.ts`
+- Create: `apps/teacher-client/src/main/index.ts`
 - Create: `apps/teacher-client/src/main/index.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1 Electron toolchain.
-- Produces: `SessionView`, `ConnectionState`, `DashboardSnapshot`, `SchoolWorkHubBridge`, and a hardened BrowserWindow.
+- Produces: `SessionView`, `ConnectionState`, `DashboardSnapshot`, fixed IPC channel constants, secure BrowserWindow options.
 
-- [ ] **Step 1: Write failing window-security tests**
-
-Extract a pure function `createWindowOptions(preloadPath: string): BrowserWindowConstructorOptions` and assert:
+- [ ] **Step 1: Write failing BrowserWindow option tests**
 
 ```ts
-expect(options.webPreferences).toMatchObject({
+expect(createWindowOptions('C:\\app\\preload.js').webPreferences).toMatchObject({
   contextIsolation: true,
   nodeIntegration: false,
   sandbox: true,
@@ -691,9 +582,9 @@ expect(options.webPreferences).toMatchObject({
 });
 ```
 
-Also assert `webSecurity` is never disabled.
+Assert `webSecurity` is not disabled.
 
-- [ ] **Step 2: Define exact state and IPC contracts**
+- [ ] **Step 2: Define exact shared types**
 
 ```ts
 export type SessionView = {
@@ -714,14 +605,14 @@ export type ConnectionState =
 export type DashboardSnapshot = {
   generatedAt: string;
   metrics: Array<{ key: string; count: number }>;
-  scheduleItems: Array<Record<string, unknown>>;
-  documentItems: Array<Record<string, unknown>>;
+  scheduleItems: Array<{ id: string; title: string; status: string; updatedAt: string }>;
+  documentItems: Array<{ id: string; title: string; status: string; updatedAt: string }>;
 };
 ```
 
-Define Zod schemas for every input crossing IPC: login, logout, restore, dashboard load, and server-change request.
+Add Zod schemas for all IPC inputs and API responses.
 
-- [ ] **Step 3: Define fixed IPC channel constants**
+- [ ] **Step 3: Define fixed channels**
 
 ```ts
 export const IPC_CHANNELS = {
@@ -737,26 +628,18 @@ export const IPC_CHANNELS = {
 } as const;
 ```
 
-No dynamic channel construction is allowed.
+- [ ] **Step 4: Implement the hardened main entry**
 
-- [ ] **Step 4: Implement the hardened main entry point**
+Call `app.enableSandbox()` before readiness, deny new windows, reject navigation away from the packaged renderer, and allow a development URL only when it exactly matches `http://127.0.0.1:<port>`.
 
-Call `app.enableSandbox()` before readiness. Create one window, deny new windows with `setWindowOpenHandler(() => ({ action: 'deny' }))`, and prevent navigation away from the packaged renderer URL. Load Vite dev URL only when `!app.isPackaged` and `SWH_TEACHER_DEV_URL` exactly matches `http://127.0.0.1:<port>`.
-
-- [ ] **Step 5: Run tests and build**
+- [ ] **Step 5: Verify and commit**
 
 ```bash
 cd apps/teacher-client
 npm test -- src/main/index.test.ts
 npm run typecheck
 npm run build:electron
-```
 
-Expected: all pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: add secure electron shell"
 ```
@@ -768,29 +651,27 @@ git commit -m "feat: add secure electron shell"
 - Create: `apps/teacher-client/src/main/security/credentialStore.test.ts`
 
 **Interfaces:**
-- Consumes: `@github/keytar`.
-- Produces: `CredentialStore.readActive()`, `CredentialStore.writeActive(session)`, `CredentialStore.deleteActive()`.
+- Produces: `readActive()`, `writeActive(session)`, `deleteActive()`.
 
-- [ ] **Step 1: Write failing adapter tests with an injected keytar port**
+- [ ] **Step 1: Write failing keytar adapter tests**
 
 ```ts
-const keytar = {
-  getPassword: vi.fn(),
-  setPassword: vi.fn(),
-  deletePassword: vi.fn(),
+const payload = {
+  schoolCode: 'sample-school',
+  userId: '3d594650-3436-4bc4-a593-8d9eea56f26d',
+  refreshToken: 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG',
 };
-const store = new CredentialStore(keytar);
-await store.writeActive({ schoolCode: 'sample-school', userId: 'u-1', refreshToken: 'r-1' });
+await store.writeActive(payload);
 expect(keytar.setPassword).toHaveBeenCalledWith(
   'SchoolWorkHub.TeacherClient',
   'active-session',
-  JSON.stringify({ schoolCode: 'sample-school', userId: 'u-1', refreshToken: 'r-1' }),
+  JSON.stringify(payload),
 );
 ```
 
-Add tests for missing credential, malformed JSON, and deletion.
+Also test missing, malformed, and deleted credentials.
 
-- [ ] **Step 2: Implement the credential payload schema**
+- [ ] **Step 2: Implement validated storage**
 
 ```ts
 const storedSessionSchema = z.object({
@@ -800,25 +681,14 @@ const storedSessionSchema = z.object({
 });
 ```
 
-Malformed values are deleted and treated as no session. Never log the returned password string or parse error input.
+Use fixed service `SchoolWorkHub.TeacherClient` and account `active-session`. Delete malformed stored values and never log their contents.
 
-- [ ] **Step 3: Implement the adapter**
-
-Use fixed service and account constants. `writeActive` replaces the active session atomically through `setPassword`; `deleteActive` ignores a missing entry but propagates OS access failures.
-
-- [ ] **Step 4: Run tests**
+- [ ] **Step 3: Verify and commit**
 
 ```bash
-cd apps/teacher-client
 npm test -- src/main/security/credentialStore.test.ts
 npm run typecheck
-```
 
-Expected: all pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: add windows credential storage"
 ```
@@ -832,12 +702,9 @@ git commit -m "feat: add windows credential storage"
 - Create: `apps/teacher-client/src/main/network/certificatePinning.test.ts`
 
 **Interfaces:**
-- Consumes: Electron `Session`, filesystem path under `app.getPath('userData')`.
-- Produces: `ServerPolicyStore.load()`, `ServerPolicyStore.replaceAtomically(candidate)`, `installCertificatePinning(session, policy)`.
+- Produces: `ServerPolicyStore.load()`, `replaceAtomically(candidate)`, `installCertificatePinning(session, policy)`.
 
-- [ ] **Step 1: Write failing policy-validation tests**
-
-Required schema:
+- [ ] **Step 1: Write policy validation tests**
 
 ```ts
 const serverPolicySchema = z.object({
@@ -848,9 +715,9 @@ const serverPolicySchema = z.object({
 });
 ```
 
-Assert HTTP URLs, malformed hashes, and unrelated fields are rejected.
+Assert HTTP URLs and malformed hashes are rejected.
 
-- [ ] **Step 2: Implement canonical fingerprint normalization**
+- [ ] **Step 2: Implement canonical normalization and a pure decision function**
 
 ```ts
 export function normalizeFingerprint(value: string): string {
@@ -858,28 +725,13 @@ export function normalizeFingerprint(value: string): string {
 }
 ```
 
-The normalized result must contain exactly 64 hexadecimal characters.
-
-- [ ] **Step 3: Write failing certificate-decision tests**
-
-Extract:
-
 ```ts
-export function decideCertificate(
-  request: Pick<CertificateVerifyProcRequest, 'hostname' | 'verificationResult' | 'certificate'>,
-  policy: ServerPolicy,
-): 0 | -2 | -3
+export function decideCertificate(request: CertificateDecisionInput, policy: ServerPolicy): 0 | -2 | -3
 ```
 
-Test these exact outcomes:
+Expected decisions: unrelated host `-3`; configured host with non-OK Chromium result `-2`; current pin `0`; next pin `0`; other pin `-2`.
 
-- unrelated hostname: `-3` to use Chromium's result;
-- configured hostname with `verificationResult !== 'OK'`: `-2`;
-- configured hostname with current fingerprint: `0`;
-- configured hostname with next fingerprint: `0`;
-- configured hostname with any other fingerprint: `-2`.
-
-- [ ] **Step 4: Implement and install pinning**
+- [ ] **Step 3: Install pinning and atomic policy replacement**
 
 ```ts
 session.setCertificateVerifyProc((request, callback) => {
@@ -887,25 +739,14 @@ session.setCertificateVerifyProc((request, callback) => {
 });
 ```
 
-Do not accept a pinned certificate when Chromium reports an invalid chain or hostname.
+Write policy JSON to a mode-`0o600` temporary file, flush it, rename it over the final file, and keep the previous file if validation or writing fails.
 
-- [ ] **Step 5: Implement atomic policy replacement**
-
-Write JSON with mode `0o600` to `<policy>.tmp`, call `fsync`, rename over the final file, then remove a leftover temporary file on the next load. Keep the previous final file when validation or write fails.
-
-- [ ] **Step 6: Run tests**
+- [ ] **Step 4: Verify and commit**
 
 ```bash
-cd apps/teacher-client
-npm test -- src/main/config src/main/network/certificatePinning.test.ts
+npm test -- src/main/config/serverPolicy.test.ts src/main/network/certificatePinning.test.ts
 npm run typecheck
-```
 
-Expected: all pass.
-
-- [ ] **Step 7: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: pin school server certificates"
 ```
@@ -919,12 +760,9 @@ git commit -m "feat: pin school server certificates"
 - Create: `apps/teacher-client/src/main/auth/authService.test.ts`
 
 **Interfaces:**
-- Consumes: server policy, credential store, Electron `net.fetch`, API contracts.
 - Produces: `ApiClient.request<T>()`, `AuthService.login()`, `restoreSession()`, `authenticatedRequest()`, `logout()`.
 
-- [ ] **Step 1: Write failing API response-validation tests**
-
-Inject a `Transport` interface:
+- [ ] **Step 1: Write failing response-validation tests**
 
 ```ts
 export type Transport = (
@@ -933,13 +771,11 @@ export type Transport = (
 ) => Promise<{ status: number; json(): Promise<unknown> }>;
 ```
 
-Assert malformed token and current-user payloads throw `ClientError('SERVER_RESPONSE_INVALID')` without leaking response data.
+Malformed token, identity, user, and dashboard payloads must throw `SERVER_RESPONSE_INVALID` without exposing response content.
 
-- [ ] **Step 2: Implement API schemas and request behavior**
+- [ ] **Step 2: Implement the API client**
 
-Use Zod for token pair, current user, server identity, and dashboard. Build URLs with `new URL(path, policy.baseUrl)`. Set `Accept: application/json` and `Content-Type: application/json`; add `Authorization` only inside the main process.
-
-Classify failures as:
+Use `new URL(path, policy.baseUrl)`, `Accept: application/json`, JSON request bodies, Electron `net.fetch`, and Zod response parsing. Add authorization only inside the main process.
 
 ```ts
 export type ClientErrorCode =
@@ -951,22 +787,18 @@ export type ClientErrorCode =
   | 'SECURITY_BLOCKED';
 ```
 
-- [ ] **Step 3: Write failing login and restore tests**
+- [ ] **Step 3: Write login, restore, and concurrent-401 tests**
 
-Login test asserts the refresh token is written to Credential Manager, access token stays in an in-memory field, and returned `SessionView` contains no token fields. Restore test begins from `readActive`, rotates the token, overwrites the credential, and fetches `/auth/me`.
+Assert login stores only the refresh token in Credential Manager, access token remains an in-memory private field, returned `SessionView` has no token fields, and restore rotates and overwrites the credential.
 
-- [ ] **Step 4: Write the concurrent 401 test**
-
-Start three authenticated requests whose first response is 401. Assert the refresh transport is called once and all three requests retry once with the new access token.
+Start three requests that initially return 401:
 
 ```ts
 expect(refreshCalls).toBe(1);
 expect(successfulRetries).toBe(3);
 ```
 
-- [ ] **Step 5: Implement `AuthService`**
-
-Maintain:
+- [ ] **Step 4: Implement `AuthService`**
 
 ```ts
 private accessToken: string | null = null;
@@ -974,21 +806,14 @@ private refreshInFlight: Promise<void> | null = null;
 private currentSession: SessionView | null = null;
 ```
 
-`authenticatedRequest` retries only once. `restoreSession` maps a network failure to an offline candidate rather than deleting credentials. A 401 from refresh deletes credentials and user cache through an injected cleanup callback. `logout` calls the server when reachable, then always clears memory, credential, and cache locally.
+Retry each request at most once. Network failure during restore preserves the credential for offline use. Refresh rejection invokes an injected credential-and-cache cleanup. Logout attempts server revocation, then always clears memory, credential, and cache locally.
 
-- [ ] **Step 6: Run tests**
+- [ ] **Step 5: Verify and commit**
 
 ```bash
-cd apps/teacher-client
 npm test -- src/main/network/apiClient.test.ts src/main/auth/authService.test.ts
 npm run typecheck
-```
 
-Expected: all pass.
-
-- [ ] **Step 7: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: add secure teacher authentication"
 ```
@@ -1004,12 +829,9 @@ git commit -m "feat: add secure teacher authentication"
 - Create: `apps/teacher-client/src/main/storage/cacheRepository.test.ts`
 
 **Interfaces:**
-- Consumes: Electron `safeStorage`, `better-sqlite3`, Windows `whoami.exe`.
-- Produces: encrypted cache `put`, `get`, `pruneExpired`, `deleteUser`.
+- Produces: encrypted `put`, `get`, `pruneExpired`, `deleteUser` operations.
 
-- [ ] **Step 1: Write failing AES-GCM tests**
-
-Assert round-trip and tamper detection:
+- [ ] **Step 1: Write AES-GCM round-trip and tamper tests**
 
 ```ts
 const encrypted = crypto.encrypt(Buffer.from('{"count":3}', 'utf8'));
@@ -1020,19 +842,17 @@ expect(() => crypto.decrypt(encrypted)).toThrow('CACHE_DECRYPT_FAILED');
 
 - [ ] **Step 2: Implement the DPAPI-protected data key**
 
-Generate a random 32-byte AES key once. Store only `safeStorage.encryptString(key.toString('base64'))` in `cache.key`. Reject startup if `safeStorage.isEncryptionAvailable()` is false on Windows. Encrypt payloads using AES-256-GCM with a random 12-byte nonce and a 16-byte authentication tag.
+Generate one random 32-byte AES key. Store only `safeStorage.encryptString(key.toString('base64'))` in `cache.key`. Reject Windows startup when `safeStorage.isEncryptionAvailable()` is false. Encrypt payloads with AES-256-GCM, a random 12-byte nonce, and a 16-byte authentication tag.
 
-- [ ] **Step 3: Write and implement Windows SID retrieval**
-
-Execute:
+- [ ] **Step 3: Retrieve the Windows SID**
 
 ```ts
 execFile('whoami.exe', ['/user', '/fo', 'csv', '/nh'], { windowsHide: true }, callback);
 ```
 
-Parse the second CSV field as a SID matching `/^S-1-/`. Inject the command runner for tests. Do not fall back to username because the design requires a Windows SID boundary.
+Parse the second CSV field and require `/^S-1-/`. Inject the command runner in tests and do not fall back to username.
 
-- [ ] **Step 4: Define the SQLite schema**
+- [ ] **Step 4: Define and test the SQLite schema**
 
 ```sql
 CREATE TABLE IF NOT EXISTS cache_entries (
@@ -1051,28 +871,17 @@ CREATE INDEX IF NOT EXISTS ix_cache_entries_user ON cache_entries(school_id, use
 
 `identity_key` is SHA-256 of `windowsSid + ':' + schoolId + ':' + userId`.
 
-- [ ] **Step 5: Write failing repository tests**
+- [ ] **Step 5: Implement repository semantics**
 
-Cover encrypted put/get, different SID rejection, different user rejection, 30-day cutoff, expired-row pruning, corrupted ciphertext deletion, and `deleteUser`.
+Store one encrypted envelope with dashboard, schedule list, document list, submission summary, role/permission snapshot, and `lastSyncAt`. Set expiry to capture time plus 30 days. Different SID/user, expired data, corrupt ciphertext, or decryption failure deletes the row and returns `null`.
 
-- [ ] **Step 6: Implement cache repository semantics**
-
-Serialize a single `CachedDashboardEnvelope` containing dashboard, schedule list, document list, submission summary, role/permission snapshot, and `lastSyncAt`. Set `expires_at` to `captured_at + 30 days`. On decryption or identity mismatch, delete the row and return `null`.
-
-- [ ] **Step 7: Run tests and native rebuild**
+- [ ] **Step 6: Verify and commit**
 
 ```bash
-cd apps/teacher-client
 npm run rebuild:native
 npm test -- src/main/security/cacheCrypto.test.ts src/main/security/windowsIdentity.test.ts src/main/storage/cacheRepository.test.ts
 npm run typecheck
-```
 
-Expected: all pass on Windows; non-Windows unit tests use injected safe-storage and SID ports.
-
-- [ ] **Step 8: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: add encrypted offline cache"
 ```
@@ -1084,24 +893,23 @@ git commit -m "feat: add encrypted offline cache"
 - Create: `apps/teacher-client/src/main/sync/syncService.test.ts`
 
 **Interfaces:**
-- Consumes: AuthService, ApiClient, CacheRepository.
-- Produces: connection events, cached fallback, sync summaries.
+- Produces: connection events, cached fallback, `SyncSummary`.
 
-- [ ] **Step 1: Write state-transition tests**
+- [ ] **Step 1: Write exact transition tests**
 
-Test exact transitions:
+Cover:
 
 ```text
-startup + online session -> online
+startup + live session -> online
 startup + network failure + cache -> offline-readonly
 startup + network failure + no cache -> offline-readonly with null snapshot
 online + network failure -> offline-readonly
-offline-readonly + reachability restored -> reconnecting -> online
-certificate mismatch from any state -> security-blocked
+offline-readonly + restored reachability -> reconnecting -> online
+any state + certificate mismatch -> security-blocked
 refresh rejection -> signed-out cleanup event
 ```
 
-- [ ] **Step 2: Define a pure transition reducer**
+- [ ] **Step 2: Implement a pure reducer**
 
 ```ts
 export function reduceConnection(
@@ -1110,19 +918,13 @@ export function reduceConnection(
 ): ConnectionState
 ```
 
-The reducer must never transition from `security-blocked` back to online through a timer event; only a newly validated server policy can clear it.
+A timer event cannot move `security-blocked` back online; only a newly validated policy can clear it.
 
-- [ ] **Step 3: Implement startup load**
+- [ ] **Step 3: Implement startup, reconnect, and cache updates**
 
-Attempt session restore and live dashboard load. On network failure, load the identity-matched cache. On successful live load, write a fresh encrypted cache before emitting `online`.
+Attempt live restore and dashboard load. On network failure, load identity-matched cache. On success, write cache before emitting online. Use reconnect delays 5, 15, 30, and 60 seconds, then remain at 60 seconds. Cancel timers on logout and shutdown.
 
-- [ ] **Step 4: Implement reconnect with bounded backoff**
-
-Use delays of 5, 15, 30, and 60 seconds, then continue at 60 seconds while the app remains open. Cancel pending timers on logout and shutdown. Do not poll while online.
-
-- [ ] **Step 5: Implement sync summary calculation**
-
-Compare stable item IDs and status fields between cached and live snapshots. Emit:
+- [ ] **Step 4: Implement sync summaries**
 
 ```ts
 export type SyncSummary = {
@@ -1133,21 +935,14 @@ export type SyncSummary = {
 };
 ```
 
-Preserve renderer route and scroll position by emitting data rather than reloading the page.
+Compare stable IDs and status fields, emit updated data without reloading the renderer, and preserve route and scroll state.
 
-- [ ] **Step 6: Run tests**
+- [ ] **Step 5: Verify and commit**
 
 ```bash
-cd apps/teacher-client
 npm test -- src/main/sync/syncService.test.ts
 npm run typecheck
-```
 
-Expected: fake timers finish with no leaked timers and all transitions pass.
-
-- [ ] **Step 7: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: add offline sync state machine"
 ```
@@ -1158,7 +953,7 @@ git commit -m "feat: add offline sync state machine"
 - Create: `apps/teacher-client/src/main/ipc/registerIpc.ts`
 - Create: `apps/teacher-client/src/main/ipc/registerIpc.test.ts`
 - Create: `apps/teacher-client/src/preload/index.ts`
-- Create: `apps/teacher-client/src/renderer/index.html`
+- Create: `apps/teacher-client/index.html`
 - Create: `apps/teacher-client/src/renderer/main.tsx`
 - Create: `apps/teacher-client/src/renderer/App.tsx`
 - Create: `apps/teacher-client/src/renderer/state/useAppController.ts`
@@ -1171,18 +966,15 @@ git commit -m "feat: add offline sync state machine"
 - Create: `apps/teacher-client/src/renderer/App.test.tsx`
 
 **Interfaces:**
-- Consumes: auth, sync, cache, and shared contracts.
 - Produces: renderer-safe `window.schoolWorkHub` bridge and approved UI.
 
-- [ ] **Step 1: Write failing IPC boundary tests**
+- [ ] **Step 1: Write IPC boundary tests**
 
-Assert unknown channels are never registered, malformed login and server-change payloads are rejected by Zod, and handler results contain no keys named `accessToken`, `refreshToken`, `token`, `certificate`, or `policyPath`.
+Assert only fixed channels are registered, malformed payloads are rejected by Zod, and handler results contain no keys named `accessToken`, `refreshToken`, `token`, `certificate`, or `policyPath`.
 
-- [ ] **Step 2: Register fixed handlers**
+- [ ] **Step 2: Register handlers and expose the preload bridge**
 
-Each `ipcMain.handle` parses input, calls one injected service method, and maps internal exceptions to a public error code. Verify `event.senderFrame.url` is the packaged renderer URL or the exact allowed development origin.
-
-- [ ] **Step 3: Expose a narrow preload bridge**
+Each handler parses input, checks the exact packaged renderer URL or allowed development origin, calls one service method, and maps internal errors to public codes.
 
 ```ts
 contextBridge.exposeInMainWorld('schoolWorkHub', {
@@ -1200,25 +992,19 @@ contextBridge.exposeInMainWorld('schoolWorkHub', {
 });
 ```
 
-Add event subscription methods that return cleanup functions and remove only their own listener.
+Event subscription functions return cleanup functions that remove only their own listener.
 
-- [ ] **Step 4: Write renderer behavior tests**
+- [ ] **Step 3: Write renderer tests**
 
-Use jsdom and Testing Library. Cover:
+Start `App.test.tsx` with:
 
-- restoring state then login state;
-- successful login to dashboard;
-- all role badges displayed;
-- menu visibility by permission union;
-- offline fixed banner and last sync time;
-- write buttons disabled in offline mode;
-- reconnect summary toast;
-- security-blocked screen hides dashboard and cache;
-- logout returns to login.
+```ts
+// @vitest-environment jsdom
+```
 
-- [ ] **Step 5: Implement the app controller**
+Cover restoring to login, login to dashboard, all role badges, permission-driven menu hiding, offline fixed banner, disabled write actions, reconnect summary, security-blocked cache hiding, and logout.
 
-Use a discriminated union:
+- [ ] **Step 4: Implement the state controller**
 
 ```ts
 type AppState =
@@ -1230,9 +1016,7 @@ type AppState =
 
 Subscribe on mount, unsubscribe on unmount, and never store token-like data.
 
-- [ ] **Step 6: Implement permission-driven navigation**
-
-Use a fixed mapping:
+- [ ] **Step 5: Implement permission-driven navigation and approved layout**
 
 ```ts
 const navigation = [
@@ -1244,27 +1028,16 @@ const navigation = [
 ];
 ```
 
-Hide unauthorized entries instead of disabling them.
+Hide unauthorized entries. Build the approved two-column login, responsive dashboard, role badges, top search, metric cards, workflow list, fixed offline banner, and data-free security block screen.
 
-- [ ] **Step 7: Implement approved visual structure**
-
-Build the two-column desktop login, responsive common dashboard, role badges, top search, metric cards, and workflow list. The offline banner is fixed below the application header and includes the last successful sync time. The security-blocked screen contains no cached values.
-
-- [ ] **Step 8: Run renderer checks**
+- [ ] **Step 6: Verify and commit**
 
 ```bash
-cd apps/teacher-client
 npm test -- src/main/ipc/registerIpc.test.ts src/renderer/App.test.tsx
 npm run lint
 npm run typecheck
 npm run build
-```
 
-Expected: all pass.
-
-- [ ] **Step 9: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: add teacher login and dashboard"
 ```
@@ -1279,32 +1052,17 @@ git commit -m "feat: add teacher login and dashboard"
 - Modify: `apps/teacher-client/src/main/ipc/registerIpc.ts`
 
 **Interfaces:**
-- Consumes: candidate server policy, certificate verifier, API client factory.
 - Produces: validated atomic server policy replacement.
 
-- [ ] **Step 1: Write failing protected-change tests**
+- [ ] **Step 1: Write protected-change tests**
 
-Assert the old policy remains unchanged when any of these fail:
+The old policy must remain unchanged when HTTPS, Chromium verification, pin match, service identity, API version, school code, administrator login, `system.admin`, or atomic write validation fails. A completely valid candidate replaces the policy once.
 
-- URL is not HTTPS;
-- Chromium certificate verification is not `OK`;
-- current or next fingerprint does not match;
-- `/api/v1/system/identity` service is not `schoolworkhub`;
-- API version is not `v1`;
-- school code differs from the submitted school code;
-- administrator login fails;
-- `/auth/me` lacks `system.admin`;
-- atomic write fails.
+- [ ] **Step 2: Implement the candidate probe**
 
-Assert a completely valid candidate replaces the policy once.
+Use a temporary in-memory Electron session. Install candidate pinning, request identity, login with administrator credentials, request `/auth/me`, require `system.admin`, revoke the temporary refresh session, and only then replace the policy.
 
-- [ ] **Step 2: Implement the candidate probe sequence**
-
-Use a temporary in-memory Electron session. Install candidate pinning on that session, request identity, login with administrator credentials, request `/auth/me`, verify `system.admin`, logout the temporary refresh session, and only then call `replaceAtomically`.
-
-- [ ] **Step 3: Expose the protected IPC command**
-
-Input:
+- [ ] **Step 3: Expose the protected input**
 
 ```ts
 export type ServerChangeInput = {
@@ -1317,106 +1075,94 @@ export type ServerChangeInput = {
 };
 ```
 
-Do not return the password, token, certificate, or raw internal error. Clear the password field from renderer state after every attempt.
+Return no password, token, certificate, or raw internal error. Clear the renderer password field after every attempt.
 
-- [ ] **Step 4: Implement the dialog visibility rule**
+- [ ] **Step 4: Limit dialog visibility**
 
-Show the server-change entry only for `ADMIN_ACTION_REQUIRED` connection failures or from the security-blocked recovery action. Do not expose it as an ordinary teacher preference.
+Show the entry only for administrator-action-required connection failures or the security-block recovery action, not as an ordinary teacher preference.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 5: Verify and commit**
 
 ```bash
-cd apps/teacher-client
 npm test -- src/main/settings/serverChangeService.test.ts src/renderer/App.test.tsx
 npm run verify
-```
 
-Expected: all pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
 git add apps/teacher-client
 git commit -m "feat: protect school server changes"
 ```
 
-### Task 13: Add Windows CI, Security Smoke Tests, and End-to-End Verification
+### Task 13: Add Windows CI, Native Security Smoke Tests, and Foundation Verification
 
 **Files:**
 - Create: `.github/workflows/teacher-client-ci.yml`
-- Create: `apps/teacher-client/scripts/windows-security-smoke.ts`
+- Create: `apps/teacher-client/src/main/scripts/windowsSecuritySmoke.ts`
+- Create: `apps/teacher-client/src/main/integration/foundationHarness.test.ts`
 - Create: `apps/teacher-client/scripts/verify-foundation.ps1`
 - Create: `apps/teacher-client/README.md`
 - Modify: `README.md`
 
 **Interfaces:**
-- Consumes: all previous tasks.
-- Produces: repeatable Linux static checks, Windows native checks, and an operator verification command.
+- Produces: cross-platform static checks, Windows native checks, and a machine-readable eight-scenario verification result.
 
-- [ ] **Step 1: Add cross-platform CI jobs**
+- [ ] **Step 1: Add CI jobs using Node.js 24**
 
-Use Node.js 24 and `npm ci`.
-
-Ubuntu job:
+Ubuntu steps:
 
 ```yaml
+- run: npm ci
 - run: npm run lint
 - run: npm run typecheck
 - run: npm test -- --coverage
 - run: npm run build
 ```
 
-Windows job:
+Windows steps:
 
 ```yaml
+- run: npm ci
 - run: npm run rebuild:native
 - run: npm test
 - run: npm run build
-- run: node dist/electron/scripts/windows-security-smoke.js
+- run: npx electron dist/electron/main/scripts/windowsSecuritySmoke.js
 ```
 
-Set `working-directory: apps/teacher-client` and trigger on teacher-client paths plus the workflow file.
+Use `working-directory: apps/teacher-client` and trigger on teacher-client paths and the workflow file.
 
-- [ ] **Step 2: Add a Windows security smoke program**
+- [ ] **Step 2: Add a real Windows security smoke program**
 
-The program runs under Electron after build and performs these assertions with a random test account:
+The Electron main script writes, reads, and deletes a random test value with `@github/keytar`; asserts `safeStorage.isEncryptionAvailable()`; encrypts and decrypts a string; deletes the credential in `finally`; never prints the secret; and exits nonzero on failure.
 
-1. `@github/keytar` writes, reads, and deletes a value in Windows Credential Manager.
-2. `safeStorage.isEncryptionAvailable()` returns true.
-3. A string encrypted by `safeStorage.encryptString` decrypts correctly.
-4. The temporary credential is deleted in a `finally` block.
-5. The process exits nonzero on any failed assertion.
+- [ ] **Step 3: Add the eight-scenario integration harness**
 
-Do not print the test secret.
+`foundationHarness.test.ts` uses the real FastAPI test server plus injected transport fault controls to verify:
 
-- [ ] **Step 3: Add `verify-foundation.ps1`**
+1. first login;
+2. restart and automatic login;
+3. access-token expiry and one refresh for concurrent requests;
+4. multiple-role permission union;
+5. network loss and encrypted read-only cache;
+6. reconnection and sync summary;
+7. certificate mismatch and security block;
+8. logout and credential/cache deletion.
 
-The script executes:
+The Windows-only credential and DPAPI paths use the real adapters; network failures and certificate decisions use deterministic fault controls around the real service layer.
+
+- [ ] **Step 4: Add `verify-foundation.ps1`**
 
 ```powershell
 npm ci
 npm run rebuild:native
 npm run verify
+npm test -- src/main/integration/foundationHarness.test.ts --reporter=json --outputFile=artifacts/foundation-vitest.json
 ```
 
-Then it starts the configured SchoolWorkHub API and verifies these scenarios through the built Electron service layer test harness:
+Parse the Vitest JSON into `artifacts/teacher-client-foundation-verification.json` with one boolean and one diagnostic code for each of the eight named scenarios. Reject output containing fields named `password`, `access_token`, or `refresh_token`.
 
-1. first login;
-2. app restart and automatic login;
-3. access-token expiry and single refresh;
-4. multiple-role permission union;
-5. network failure and encrypted read-only cache;
-6. reconnection and sync summary;
-7. certificate mismatch and security block;
-8. logout and credential/cache deletion.
+- [ ] **Step 5: Document setup and operations**
 
-The script writes a timestamped JSON result under `artifacts/teacher-client-foundation-verification.json` with one boolean and one diagnostic code per scenario. It never writes passwords or tokens.
+Document Node 24, supported Windows versions, native rebuild, server-policy deployment, current/next pin rotation, cache location, credential service name, quality commands, and the verifier command.
 
-- [ ] **Step 4: Document setup and operational constraints**
-
-Document Node 24, Windows 11/Windows Server support, native rebuild, server-policy JSON deployment, current/next fingerprint rotation, local cache location, credential service name, CI commands, and the exact verification script command.
-
-- [ ] **Step 5: Run every repository quality gate**
+- [ ] **Step 6: Run all repository gates**
 
 ```bash
 cd services/api-server
@@ -1431,22 +1177,17 @@ npm run rebuild:native
 npm run verify
 ```
 
-Expected: every command exits with code 0.
-
-- [ ] **Step 6: Run the Windows foundation verifier**
+On Windows:
 
 ```powershell
-cd apps/teacher-client
 powershell -ExecutionPolicy Bypass -File scripts/verify-foundation.ps1
 ```
 
-Expected: eight scenario results are `true`; no token or password appears in the artifact.
+Expected: all commands exit 0 and all eight scenario booleans are true.
 
-- [ ] **Step 7: Inspect GitHub Actions**
+- [ ] **Step 7: Verify GitHub Actions and commit**
 
-Push the branch and confirm API CI, Server Manager CI, and Teacher Client CI all complete successfully for the same head commit. Do not update the PR verification section until all three conclusions are `success`.
-
-- [ ] **Step 8: Commit**
+Push the branch and require API CI, Server Manager CI, and Teacher Client CI to report `success` for the same head commit before updating the PR verification text.
 
 ```bash
 git add .github apps/teacher-client README.md
@@ -1455,7 +1196,7 @@ git commit -m "ci: verify teacher client foundation"
 
 ## Plan Self-Review
 
-- Spec coverage: authentication, automatic restoration, 15-minute/30-day token policy, refresh rotation, role union, permission-driven UI, recent-30-day encrypted cache, offline read-only behavior, reconnection summary, current/next certificate pins, protected server change, logout cleanup, API tests, renderer tests, Windows security smoke, and CI each map to at least one task.
-- Placeholder scan: the plan contains no `TBD`, `TODO`, incomplete implementation marker, or undefined neighboring interface.
-- Type consistency: `SessionView`, `ConnectionState`, `DashboardSnapshot`, `ServerPolicy`, `SyncSummary`, `CredentialStore`, `ApiClient`, and `AuthService` names are stable across producing and consuming tasks.
-- Scope check: document and calendar editing, offline writes, installers, release signing, and updater work remain outside this sub-project exactly as the approved design requires.
+- Spec coverage: authentication, automatic restoration, exact token lifetimes, refresh rotation, role union, permission-driven UI, recent-30-day encrypted cache, offline read-only behavior, reconnection summary, dual certificate pins, protected server change, logout cleanup, API tests, renderer tests, Windows native smoke, and CI each map to a task.
+- Completion scan: every task names concrete files, commands, expected outcomes, interfaces, tests, and a commit boundary.
+- Type consistency: `SessionView`, `ConnectionState`, `DashboardSnapshot`, `ServerPolicy`, `SyncSummary`, `CredentialStore`, `ApiClient`, and `AuthService` keep the same names across producer and consumer tasks.
+- Scope check: document and calendar editing, offline writes, installers, release signing, and updater work remain outside this sub-project as required by the approved design.
