@@ -23,10 +23,20 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
-class TokenResponse(BaseModel):
+class TokenPairResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     expires_in_seconds: int
+    refresh_expires_in_seconds: int
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=512)
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=512)
 
 
 class CurrentUserResponse(BaseModel):
@@ -34,7 +44,9 @@ class CurrentUserResponse(BaseModel):
 
     id: UUID
     school_id: UUID
+    school_name: str
     department_id: UUID | None
+    department_names: list[str]
     username: str
     display_name: str
     is_superuser: bool
