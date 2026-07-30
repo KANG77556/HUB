@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - ".github/workflows/teacher-client-bootstrap.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/teacher-client-bootstrap.yml"
 
 permissions:
   contents: write
@@ -21,8 +24,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: apps/teacher-client/package-lock.json
       - name: Install
         run: npm install
       - name: Lint
@@ -30,6 +31,7 @@ jobs:
       - name: Type check
         run: npm run typecheck
       - name: Commit lockfile
+        if: github.event_name == 'push'
         working-directory: .
         run: |
           git config user.name "github-actions[bot]"
