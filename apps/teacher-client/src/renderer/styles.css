@@ -1,0 +1,57 @@
+:root {
+  font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.bootstrap-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 15% 20%, rgb(14 165 233 / 16%), transparent 35%),
+    radial-gradient(circle at 85% 85%, rgb(15 39 68 / 18%), transparent 38%),
+    #f1f5f9;
+}
+
+.bootstrap-card {
+  width: min(640px, 100%);
+  padding: 48px;
+  border: 1px solid rgb(255 255 255 / 80%);
+  border-radius: 28px;
+  background: white;
+  box-shadow: 0 24px 64px rgb(15 23 42 / 12%);
+}
+
+.bootstrap-card h1 {
+  margin: 8px 0 16px;
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: -0.04em;
+}
+
+.bootstrap-card p {
+  color: #64748b;
+  line-height: 1.7;
+}
+
+.bootstrap-card .eyebrow {
+  margin: 0;
+  color: #0369a1;
+  font-weight: 800;
+}
