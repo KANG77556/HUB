@@ -29,7 +29,6 @@ from schoolworkhub.permissions import require_permission
 from schoolworkhub.routers.auth import SessionDep
 from schoolworkhub.security import hash_password
 
-
 router = APIRouter(prefix="/api/v1/admin", tags=["administration"])
 UsersManagerDep = Annotated[User, Depends(require_permission("users.manage"))]
 RolesManagerDep = Annotated[User, Depends(require_permission("roles.manage"))]
