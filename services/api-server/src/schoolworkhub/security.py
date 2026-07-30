@@ -1,6 +1,8 @@
+import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
 from argon2 import PasswordHasher
@@ -28,6 +30,14 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def create_access_token(user_id: UUID, school_id: UUID) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
@@ -36,6 +46,7 @@ def create_access_token(user_id: UUID, school_id: UUID) -> str:
         "sub": str(user_id),
         "school_id": str(school_id),
         "iss": "schoolworkhub",
+        "jti": str(uuid4()),
         "iat": now,
         "exp": expires_at,
     }
