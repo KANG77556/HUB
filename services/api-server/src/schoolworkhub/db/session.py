@@ -7,14 +7,21 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from schoolworkhub.settings import get_settings
 
 settings = get_settings()
-engine: AsyncEngine = create_async_engine(
-    settings.database_url,
-    pool_pre_ping=True,
-)
+if settings.environment == "test":
+    engine: AsyncEngine = create_async_engine(
+        settings.database_url,
+        poolclass=NullPool,
+    )
+else:
+    engine = create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+    )
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
