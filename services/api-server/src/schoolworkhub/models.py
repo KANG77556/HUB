@@ -62,6 +62,27 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class RefreshSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "refresh_sessions"
+
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    school_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("schools.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "roles"
     __table_args__ = (UniqueConstraint("school_id", "code", name="uq_role_school_code"),)
