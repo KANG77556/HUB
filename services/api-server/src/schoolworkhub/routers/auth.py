@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from schoolworkhub.audit import write_audit_log
 from schoolworkhub.db.session import get_session
 from schoolworkhub.models import (
+    Department,
     Permission,
     Role,
     RolePermission,
@@ -16,7 +17,19 @@ from schoolworkhub.models import (
     User,
     UserRole,
 )
-from schoolworkhub.schemas import CurrentUserResponse, LoginRequest, TokenResponse
+from schoolworkhub.refresh_sessions import (
+    RefreshSessionRejected,
+    issue_refresh_session,
+    revoke_refresh_session,
+    rotate_refresh_session,
+)
+from schoolworkhub.schemas import (
+    CurrentUserResponse,
+    LoginRequest,
+    LogoutRequest,
+    RefreshRequest,
+    TokenPairResponse,
+)
 from schoolworkhub.security import (
     InvalidTokenError,
     create_access_token,
@@ -66,8 +79,8 @@ async def get_current_user(credentials: CredentialsDep, session: SessionDep) -> 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, session: SessionDep) -> TokenResponse:
+@router.post("/login", response_model=TokenPairResponse)
+async def login(payload: LoginRequest, session: SessionDep) -> TokenPairResponse:
     settings = get_settings()
     user = await session.scalar(
         select(User)
@@ -113,16 +126,55 @@ async def login(payload: LoginRequest, session: SessionDep) -> TokenResponse:
         school_id=user.school_id,
         actor_user_id=user.id,
     )
+    issued = await issue_refresh_session(session, user)
     await session.commit()
 
-    return TokenResponse(
+    return TokenPairResponse(
         access_token=create_access_token(user.id, user.school_id),
+        refresh_token=issued.raw_token,
         expires_in_seconds=settings.access_token_ttl_minutes * 60,
+        refresh_expires_in_seconds=settings.refresh_token_ttl_days * 24 * 60 * 60,
     )
+
+
+@router.post("/refresh", response_model=TokenPairResponse)
+async def refresh(payload: RefreshRequest, session: SessionDep) -> TokenPairResponse:
+    try:
+        user, issued = await rotate_refresh_session(session, payload.refresh_token)
+    except RefreshSessionRejected as exc:
+        raise authentication_error() from exc
+
+    settings = get_settings()
+    response = TokenPairResponse(
+        access_token=create_access_token(user.id, user.school_id),
+        refresh_token=issued.raw_token,
+        expires_in_seconds=settings.access_token_ttl_minutes * 60,
+        refresh_expires_in_seconds=settings.refresh_token_ttl_days * 24 * 60 * 60,
+    )
+    await session.commit()
+    return response
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(payload: LogoutRequest, session: SessionDep) -> None:
+    await revoke_refresh_session(session, payload.refresh_token)
+    await session.commit()
 
 
 @router.get("/me", response_model=CurrentUserResponse)
 async def read_current_user(user: CurrentUserDep, session: SessionDep) -> CurrentUserResponse:
+    school = await session.get(School, user.school_id)
+    if school is None:
+        raise authentication_error()
+
+    department_names = list(
+        await session.scalars(
+            select(Department.name).where(
+                Department.id == user.department_id,
+                Department.school_id == user.school_id,
+            )
+        )
+    )
     roles = list(
         await session.scalars(
             select(Role.code)
@@ -144,7 +196,9 @@ async def read_current_user(user: CurrentUserDep, session: SessionDep) -> Curren
     return CurrentUserResponse(
         id=user.id,
         school_id=user.school_id,
+        school_name=school.name,
         department_id=user.department_id,
+        department_names=department_names,
         username=user.username,
         display_name=user.display_name,
         is_superuser=user.is_superuser,
