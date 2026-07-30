@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     )
     secret_key: SecretStr = SecretStr("development-only-change-this-secret-key")
     jwt_algorithm: str = "HS256"
-    access_token_ttl_minutes: int = 30
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
     login_failure_limit: int = 5
     login_lock_minutes: int = 15
 
