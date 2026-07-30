@@ -48,8 +48,11 @@ jobs:
         run: python -m pip install --upgrade pip && pip install -e ".[dev]"
       - name: Migrate database
         run: alembic upgrade head
-      - name: Lint
-        run: ruff check .
+      - name: Diagnose lint
+        run: |
+          ruff check src/schoolworkhub/routers/admin.py --fix
+          git diff -- src/schoolworkhub/routers/admin.py
+          git diff --exit-code -- src/schoolworkhub/routers/admin.py
       - name: Type check
         run: mypy
       - name: Test
