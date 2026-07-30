@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   decideCertificate,
   installCertificatePinning,
+  type CertificateDecision,
   type CertificateSession,
+  type CertificateVerifyHandler,
 } from './certificatePinning.js';
 import type { ServerPolicy } from '../config/serverPolicy.js';
 
@@ -47,21 +49,16 @@ describe('certificate pinning', () => {
   });
 
   it('installs the pure decision function on the Electron session', () => {
-    let installed:
-      | ((
-          requestValue: ReturnType<typeof request>,
-          callback: (decision: number) => void,
-        ) => void)
-      | undefined;
+    let installed: CertificateVerifyHandler | undefined;
     const session: CertificateSession = {
-      setCertificateVerifyProc: vi.fn((handler) => {
+      setCertificateVerifyProc: vi.fn((handler: CertificateVerifyHandler) => {
         installed = handler;
       }),
     };
 
     installCertificatePinning(session, policy);
     expect(installed).toBeDefined();
-    const callback = vi.fn<(decision: number) => void>();
+    const callback = vi.fn<(decision: CertificateDecision) => void>();
     installed?.(request('school.example', 'net::OK', currentFingerprint), callback);
     expect(callback).toHaveBeenCalledWith(0);
   });
