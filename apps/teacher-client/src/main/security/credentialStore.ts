@@ -12,9 +12,9 @@ export const storedSessionSchema = z.object({
 export type StoredSession = z.infer<typeof storedSessionSchema>;
 
 export type KeytarAdapter = {
-  getPassword(service: string, account: string): Promise<string | null>;
-  setPassword(service: string, account: string, password: string): Promise<void>;
-  deletePassword(service: string, account: string): Promise<boolean>;
+  getPassword: (service: string, account: string) => Promise<string | null>;
+  setPassword: (service: string, account: string, password: string) => Promise<void>;
+  deletePassword: (service: string, account: string) => Promise<boolean>;
 };
 
 export class CredentialStore {
