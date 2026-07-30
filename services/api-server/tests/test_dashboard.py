@@ -1,6 +1,4 @@
-import asyncio
-
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from schoolworkhub.db.session import engine
@@ -20,11 +18,12 @@ async def reset_database() -> None:
     await engine.dispose()
 
 
-def test_server_identity_and_permission_union_dashboard() -> None:
-    asyncio.run(reset_database())
+async def test_server_identity_and_permission_union_dashboard() -> None:
+    await reset_database()
     try:
-        with TestClient(create_app()) as client:
-            initial_identity = client.get("/api/v1/system/identity")
+        transport = ASGITransport(app=create_app())
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            initial_identity = await client.get("/api/v1/system/identity")
             assert initial_identity.status_code == 200
             assert initial_identity.json() == {
                 "service": "schoolworkhub",
@@ -33,7 +32,7 @@ def test_server_identity_and_permission_union_dashboard() -> None:
                 "school_name": None,
             }
 
-            bootstrap_response = client.post(
+            bootstrap_response = await client.post(
                 "/api/v1/setup/bootstrap",
                 json={
                     "school_code": "sample-school",
@@ -46,7 +45,7 @@ def test_server_identity_and_permission_union_dashboard() -> None:
             assert bootstrap_response.status_code == 201
             admin_user_id = bootstrap_response.json()["admin_user_id"]
 
-            identity = client.get("/api/v1/system/identity")
+            identity = await client.get("/api/v1/system/identity")
             assert identity.status_code == 200
             assert identity.json() == {
                 "service": "schoolworkhub",
@@ -55,10 +54,10 @@ def test_server_identity_and_permission_union_dashboard() -> None:
                 "school_name": "샘플학교",
             }
 
-            anonymous_dashboard = client.get("/api/v1/dashboard")
+            anonymous_dashboard = await client.get("/api/v1/dashboard")
             assert anonymous_dashboard.status_code == 401
 
-            login_response = client.post(
+            login_response = await client.post(
                 "/api/v1/auth/login",
                 json={
                     "school_code": "sample-school",
@@ -71,7 +70,7 @@ def test_server_identity_and_permission_union_dashboard() -> None:
                 "Authorization": f"Bearer {login_response.json()['access_token']}"
             }
 
-            roles_response = client.get("/api/v1/admin/roles", headers=headers)
+            roles_response = await client.get("/api/v1/admin/roles", headers=headers)
             assert roles_response.status_code == 200
             administrator_role_id = next(
                 role["id"]
@@ -79,7 +78,7 @@ def test_server_identity_and_permission_union_dashboard() -> None:
                 if role["code"] == "administrator"
             )
 
-            extra_role_response = client.post(
+            extra_role_response = await client.post(
                 "/api/v1/admin/roles",
                 headers=headers,
                 json={
@@ -91,14 +90,14 @@ def test_server_identity_and_permission_union_dashboard() -> None:
             assert extra_role_response.status_code == 201
             extra_role_id = extra_role_response.json()["id"]
 
-            update_response = client.patch(
+            update_response = await client.patch(
                 f"/api/v1/admin/users/{admin_user_id}",
                 headers=headers,
                 json={"role_ids": [administrator_role_id, extra_role_id]},
             )
             assert update_response.status_code == 200
 
-            dashboard_response = client.get("/api/v1/dashboard", headers=headers)
+            dashboard_response = await client.get("/api/v1/dashboard", headers=headers)
             assert dashboard_response.status_code == 200
             dashboard = dashboard_response.json()
             assert dashboard["roles"] == ["administrator", "teacher_lead"]
@@ -115,4 +114,4 @@ def test_server_identity_and_permission_union_dashboard() -> None:
             assert dashboard["document_items"] == []
             assert dashboard["generated_at"]
     finally:
-        asyncio.run(reset_database())
+        await reset_database()
