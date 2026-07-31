@@ -20,7 +20,6 @@ import {
   type CacheDatabase,
   type CacheIdentity,
   type CacheRow,
-  type OfflineCacheSnapshot,
 } from '../storage/cacheRepository.js';
 import {
   SyncService,
@@ -39,18 +38,19 @@ const CURRENT_FINGERPRINT = 'A'.repeat(64);
 class MemoryKeytarAdapter implements KeytarAdapter {
   private storedValue: string | null = null;
 
-  async getPassword(): Promise<string | null> {
-    return this.storedValue;
+  getPassword(): Promise<string | null> {
+    return Promise.resolve(this.storedValue);
   }
 
-  async setPassword(_service: string, _account: string, value: string): Promise<void> {
+  setPassword(_service: string, _account: string, value: string): Promise<void> {
     this.storedValue = value;
+    return Promise.resolve();
   }
 
-  async deletePassword(): Promise<boolean> {
+  deletePassword(): Promise<boolean> {
     const existed = this.storedValue !== null;
     this.storedValue = null;
-    return existed;
+    return Promise.resolve(existed);
   }
 }
 
@@ -101,8 +101,8 @@ class MemoryCacheDatabase implements CacheDatabase {
   }
 
   firstRow(): CacheRow | null {
-    const row = this.rows.values().next().value as CacheRow | undefined;
-    return row === undefined ? null : cloneRow(row);
+    const next = this.rows.values().next();
+    return next.done ? null : cloneRow(next.value);
   }
 }
 
@@ -161,7 +161,7 @@ async function startFoundationApi(): Promise<RunningApi> {
   const child = spawn(python, [script, '--port', String(port)], {
     cwd: process.cwd(),
     env: { ...process.env, PYTHONUNBUFFERED: '1' },
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: 'pipe',
   });
 
   const stdout = createInterface({ input: child.stdout });
@@ -172,11 +172,16 @@ async function startFoundationApi(): Promise<RunningApi> {
   });
 
   await new Promise<void>((resolveReady, reject) => {
+    let settled = false;
     const timeout = setTimeout(() => {
-      reject(new Error(`FOUNDATION_API_START_TIMEOUT:${stderr}`));
+      finish(new Error(`FOUNDATION_API_START_TIMEOUT:${stderr}`));
     }, 15_000);
 
     const finish = (error?: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       clearTimeout(timeout);
       stdout.close();
       if (error === undefined) {
@@ -224,17 +229,21 @@ class FaultControlledTransport {
     ) {
       return {
         status: 401,
-        json: async () => ({ detail: 'expired' }),
+        json: () => Promise.resolve({ detail: 'expired' }),
       };
     }
 
-    const response = await fetch(url, init);
+    const requestUrl = new URL(url);
+    if (requestUrl.hostname === '127.0.0.1') {
+      requestUrl.protocol = 'http:';
+    }
+    const response = await fetch(requestUrl, init);
     const text = await response.text();
     let payload: unknown = null;
     if (text.length > 0) {
       payload = JSON.parse(text) as unknown;
     }
-    const path = new URL(url).pathname;
+    const path = requestUrl.pathname;
     if (
       response.ok &&
       (path.endsWith('/auth/login') || path.endsWith('/auth/refresh')) &&
@@ -247,7 +256,7 @@ class FaultControlledTransport {
     }
     const transportResponse: TransportResponse = {
       status: response.status,
-      json: async () => payload,
+      json: () => Promise.resolve(payload),
     };
     return transportResponse;
   };
@@ -292,8 +301,9 @@ describe.sequential('teacher client foundation', () => {
   let offlineEvents: SyncServiceEvent[] = [];
 
   const createAuth = (): AuthService =>
-    new AuthService(api, credentialStore, async ({ userId }) => {
+    new AuthService(api, credentialStore, ({ userId }) => {
       cacheRepository.deleteUser(SCHOOL_ID, userId);
+      return Promise.resolve();
     });
 
   const createSync = (
@@ -305,7 +315,7 @@ describe.sequential('teacher client foundation', () => {
       api,
       cache: cacheRepository,
       identityProvider: {
-        forSession: async (session) => cacheIdentity(session.userId),
+        forSession: (session) => Promise.resolve(cacheIdentity(session.userId)),
         forStoredCredential: async () => {
           const stored = await credentialStore.readActive();
           return stored === null ? null : cacheIdentity(stored.userId);
@@ -321,7 +331,7 @@ describe.sequential('teacher client foundation', () => {
     controls = new FaultControlledTransport();
     api = new ApiClient(
       parseServerPolicy({
-        baseUrl: runningApi.baseUrl,
+        baseUrl: runningApi.baseUrl.replace('http:', 'https:'),
         schoolCode: SCHOOL_CODE,
         currentFingerprint: CURRENT_FINGERPRINT,
         nextFingerprint: null,
