@@ -34,8 +34,8 @@ const stored: StoredSession = {
 };
 const identity: CacheIdentity = {
   windowsSid: 'S-1-5-21-1000-2000-3000-4000',
-  schoolId: 'sample-school',
-  userId: session.userId,
+  schoolId: stored.schoolCode,
+  userId: stored.userId,
 };
 const snapshot: OfflineCacheSnapshot = {
   dashboard: {
@@ -82,12 +82,12 @@ type HarnessOptions = {
 
 function createHarness(options: HarnessOptions = {}) {
   const rendererEvents: Array<{ channel: string; payload?: unknown }> = [];
-  let syncEmitter: ((event: SyncServiceEvent) => void) | null = null;
+  let emitSync: ((event: SyncServiceEvent) => void) | null = null;
   const sync: RuntimeSyncService = {
     start: vi.fn((initialSession?: SessionView) => {
       void initialSession;
       for (const event of options.startEvents ?? []) {
-        syncEmitter?.(event);
+        emitSync?.(event);
       }
       return Promise.resolve();
     }),
@@ -123,14 +123,13 @@ function createHarness(options: HarnessOptions = {}) {
     }),
   };
   const onPolicyChanged = vi.fn();
-
   const runtime = createTeacherClientRuntime({
     auth,
     credentialStore,
     cache,
     identityProvider,
     createSync: (emit) => {
-      syncEmitter = emit;
+      emitSync = emit;
       return sync;
     },
     settings,
@@ -146,15 +145,12 @@ function createHarness(options: HarnessOptions = {}) {
     runtime,
     sync,
     auth,
-    credentialStore,
     cache,
     identityProvider,
     settings,
     onPolicyChanged,
     rendererEvents,
-    emitSync: (event: SyncServiceEvent): void => {
-      syncEmitter?.(event);
-    },
+    emitSync: (event: SyncServiceEvent): void => emitSync?.(event),
   };
 }
 
@@ -184,10 +180,7 @@ describe('teacher client runtime', () => {
     const harness = createHarness({
       liveSession: null,
       cachedSnapshot: snapshot,
-      startEvents: [
-        { type: 'snapshot', source: 'cache', snapshot },
-        { type: 'state', state: offline },
-      ],
+      startEvents: [{ type: 'state', state: offline }],
     });
 
     await expect(harness.runtime.services.auth.restoreSession()).resolves.toEqual({
@@ -206,13 +199,12 @@ describe('teacher client runtime', () => {
   it('passes a freshly authenticated session into synchronization', async () => {
     const harness = createHarness();
     const input: LoginInput = {
-      schoolCode: 'sample-school',
+      schoolCode: stored.schoolCode,
       username: 'teacher',
       password: 'password',
     };
 
     await expect(harness.runtime.services.auth.login(input)).resolves.toEqual(session);
-
     expect(harness.auth.login).toHaveBeenCalledWith(input);
     expect(harness.sync.start).toHaveBeenCalledWith(session);
   });
@@ -242,7 +234,6 @@ describe('teacher client runtime', () => {
     await harness.runtime.services.auth.restoreSession();
 
     await expect(harness.runtime.services.auth.logout()).resolves.toBeUndefined();
-
     expect(harness.sync.stop).toHaveBeenCalledTimes(1);
     expect(harness.auth.logout).toHaveBeenCalledTimes(1);
     await expect(harness.runtime.services.dashboard.load()).rejects.toMatchObject({
@@ -254,7 +245,7 @@ describe('teacher client runtime', () => {
     const harness = createHarness();
     const input: ServerChangeInput = {
       baseUrl: 'https://new-school.example/',
-      schoolCode: 'sample-school',
+      schoolCode: stored.schoolCode,
       currentFingerprint: 'A'.repeat(64),
       nextFingerprint: null,
       adminUsername: 'administrator',
@@ -264,7 +255,6 @@ describe('teacher client runtime', () => {
     await expect(
       harness.runtime.services.settings.requestServerChange(input),
     ).resolves.toBeUndefined();
-
     expect(harness.settings.requestServerChange).toHaveBeenCalledWith(input);
     expect(harness.onPolicyChanged).toHaveBeenCalledTimes(1);
   });
