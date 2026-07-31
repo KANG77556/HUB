@@ -1,9 +1,11 @@
 export type SecurityBlockedScreenProps = {
   code: string;
+  onChangeServer: () => void;
 };
 
 export function SecurityBlockedScreen({
   code,
+  onChangeServer,
 }: SecurityBlockedScreenProps): React.JSX.Element {
   return (
     <main className="security-blocked-screen">
@@ -25,6 +27,13 @@ export function SecurityBlockedScreen({
             <dd>학교 시스템 관리자에게 서버 설정 확인을 요청하세요.</dd>
           </div>
         </dl>
+        <button
+          className="primary-button security-recovery-button"
+          type="button"
+          onClick={onChangeServer}
+        >
+          학교 서버 설정 변경
+        </button>
       </section>
     </main>
   );
