@@ -13,7 +13,7 @@ const policy: ServerPolicy = {
 function response(status: number, body: unknown) {
   return {
     status,
-    json: async (): Promise<unknown> => body,
+    json: (): Promise<unknown> => Promise.resolve(body),
   };
 }
 
