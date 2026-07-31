@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   ConnectionState,
   DashboardSnapshot,
+  ServerChangeInput,
   SessionView,
 } from '../../shared/contracts.js';
 import { IPC_CHANNELS } from './channels.js';
@@ -18,6 +19,12 @@ type Handler = (
   event: IpcInvokeEventPort,
   ...args: readonly unknown[]
 ) => Promise<unknown>;
+
+type TestServices = IpcHandlerServices & {
+  settings: {
+    requestServerChange: (input: ServerChangeInput) => Promise<void>;
+  };
+};
 
 class FakeIpcMain implements IpcMainPort {
   public readonly handlers = new Map<string, Handler>();
@@ -52,7 +59,7 @@ const connection: ConnectionState = {
   lastSyncAt: dashboard.generatedAt,
 };
 
-function createServices(): IpcHandlerServices {
+function createServices(): TestServices {
   return {
     auth: {
       login: vi.fn<IpcHandlerServices['auth']['login']>().mockResolvedValue(session),
@@ -70,6 +77,11 @@ function createServices(): IpcHandlerServices {
       getStatus: vi
         .fn<IpcHandlerServices['connection']['getStatus']>()
         .mockResolvedValue(connection),
+    },
+    settings: {
+      requestServerChange: vi
+        .fn<TestServices['settings']['requestServerChange']>()
+        .mockResolvedValue(undefined),
     },
   };
 }
@@ -92,7 +104,7 @@ async function invoke(
 }
 
 describe('registerIpcHandlers', () => {
-  it('registers only the five approved invoke channels and disposes them', () => {
+  it('registers only the six approved invoke channels and disposes them', () => {
     const ipcMain = new FakeIpcMain();
     const dispose = registerIpcHandlers(
       ipcMain,
@@ -107,6 +119,7 @@ describe('registerIpcHandlers', () => {
         IPC_CHANNELS.authLogout,
         IPC_CHANNELS.dashboardLoad,
         IPC_CHANNELS.connectionStatus,
+        IPC_CHANNELS.serverChange,
       ].sort(),
     );
 
@@ -148,6 +161,54 @@ describe('registerIpcHandlers', () => {
       },
     });
     expect(services.auth.login).not.toHaveBeenCalled();
+  });
+
+  it('validates protected server changes and returns no submitted secret', async () => {
+    const ipcMain = new FakeIpcMain();
+    const services = createServices();
+    registerIpcHandlers(
+      ipcMain,
+      services,
+      createSenderUrlValidator(packagedUrl, developmentUrl),
+    );
+
+    await expect(
+      invoke(ipcMain, IPC_CHANNELS.serverChange, eventFor(packagedUrl), {
+        baseUrl: 'http://insecure.example/',
+        schoolCode: 'sample-school',
+        currentFingerprint: 'A'.repeat(64),
+        nextFingerprint: null,
+        adminUsername: 'administrator',
+        adminPassword: 'temporary-secret',
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        category: 'retryable',
+        message: '입력값을 확인해 주세요.',
+      },
+    });
+    expect(services.settings.requestServerChange).not.toHaveBeenCalled();
+
+    const validInput: ServerChangeInput = {
+      baseUrl: 'https://new-school.example/',
+      schoolCode: 'sample-school',
+      currentFingerprint: 'A'.repeat(64),
+      nextFingerprint: 'B'.repeat(64),
+      adminUsername: 'administrator',
+      adminPassword: 'temporary-secret',
+    };
+    const result = await invoke(
+      ipcMain,
+      IPC_CHANNELS.serverChange,
+      eventFor(packagedUrl),
+      validInput,
+    );
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(services.settings.requestServerChange).toHaveBeenCalledWith(validInput);
+    expect(JSON.stringify(result)).not.toContain('temporary-secret');
   });
 
   it('rejects calls from an untrusted renderer URL', async () => {
