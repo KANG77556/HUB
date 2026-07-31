@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  type IpcMainInvokeEvent,
+} from 'electron';
 
 import type { IpcHandlerServices } from '../ipc/registerIpc.js';
 import {
@@ -27,7 +32,7 @@ function requireCondition(condition: boolean, code: string): void {
 }
 
 function createEventPort(
-  event: Electron.IpcMainInvokeEvent,
+  event: IpcMainInvokeEvent,
 ): IpcInvokeEventPort {
   return {
     senderFrame:
@@ -87,7 +92,7 @@ async function runSmoke(): Promise<void> {
         ipcMain.handle(
           channel,
           (
-            event: Electron.IpcMainInvokeEvent,
+            event: IpcMainInvokeEvent,
             ...args: unknown[]
           ): Promise<unknown> => handler(createEventPort(event), ...args),
         );
