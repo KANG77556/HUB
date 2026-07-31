@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConnectionState,
   DashboardSnapshot,
+  ServerChangeInput,
   SessionView,
   SyncSummary,
 } from '../shared/contracts.js';
@@ -20,6 +21,7 @@ import type {
   BridgeResult,
   SchoolWorkHubBridge,
 } from '../shared/bridge.js';
+import type { AppErrorView } from '../shared/errors.js';
 import { App } from './App.js';
 
 const session: SessionView = {
@@ -62,6 +64,18 @@ function success<T>(value: T): BridgeResult<T> {
   return { ok: true, value };
 }
 
+function failure<T>(error: AppErrorView): BridgeResult<T> {
+  return { ok: false, error };
+}
+
+type TestBridge = SchoolWorkHubBridge & {
+  settings: {
+    requestServerChange: (
+      input: ServerChangeInput,
+    ) => Promise<BridgeResult<void>>;
+  };
+};
+
 type EventCallbacks = {
   connection: ((state: ConnectionState) => void) | null;
   summary: ((summary: SyncSummary) => void) | null;
@@ -71,8 +85,10 @@ type EventCallbacks = {
 function createBridge(options: {
   restored?: SessionView | null;
   connection?: ConnectionState;
+  connectionResult?: BridgeResult<ConnectionState>;
+  serverChangeResult?: BridgeResult<void>;
 } = {}): {
-  bridge: SchoolWorkHubBridge;
+  bridge: TestBridge;
   callbacks: EventCallbacks;
 } {
   const callbacks: EventCallbacks = {
@@ -82,7 +98,7 @@ function createBridge(options: {
   };
   const restored = options.restored ?? null;
   const connection = options.connection ?? online;
-  const bridge: SchoolWorkHubBridge = {
+  const bridge: TestBridge = {
     auth: {
       login: vi.fn<SchoolWorkHubBridge['auth']['login']>().mockResolvedValue(success(session)),
       restoreSession: vi
@@ -98,7 +114,12 @@ function createBridge(options: {
     connection: {
       getStatus: vi
         .fn<SchoolWorkHubBridge['connection']['getStatus']>()
-        .mockResolvedValue(success(connection)),
+        .mockResolvedValue(options.connectionResult ?? success(connection)),
+    },
+    settings: {
+      requestServerChange: vi
+        .fn<TestBridge['settings']['requestServerChange']>()
+        .mockResolvedValue(options.serverChangeResult ?? success(undefined)),
     },
     events: {
       onConnectionChanged: (listener) => {
@@ -130,7 +151,7 @@ function createBridge(options: {
   return { bridge, callbacks };
 }
 
-function installBridge(bridge: SchoolWorkHubBridge): void {
+function installBridge(bridge: TestBridge): void {
   window.schoolWorkHub = bridge;
 }
 
@@ -143,7 +164,7 @@ afterEach(() => {
 });
 
 describe('App', () => {
-  it('restores to the login screen when no session exists', async () => {
+  it('restores to the login screen without exposing server settings for an ordinary signed-out state', async () => {
     const { bridge } = createBridge();
     installBridge(bridge);
 
@@ -151,6 +172,7 @@ describe('App', () => {
 
     expect(screen.getByText('세션을 확인하고 있습니다.')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '교직원 로그인' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '학교 서버 설정 변경' })).not.toBeInTheDocument();
     expect(bridge.dashboard.load).not.toHaveBeenCalled();
   });
 
@@ -178,6 +200,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '일정·회의' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '자료 제출' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '구성원' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '학교 서버 설정 변경' })).not.toBeInTheDocument();
     expect(bridge.auth.login).toHaveBeenCalledWith({
       schoolCode: 'sample-school',
       username: 'teacher',
@@ -220,12 +243,38 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: '업무 대시보드' })).toBeInTheDocument();
   });
 
-  it('hides cached business data on a security-blocked state', async () => {
+  it('offers protected recovery for an administrator-action-required connection failure', async () => {
+    const { bridge } = createBridge({
+      restored: session,
+      connectionResult: failure({
+        code: 'SERVER_CONFIGURATION_INVALID',
+        category: 'administrator-action-required',
+        message: '학교 서버 설정을 확인해야 합니다.',
+      }),
+    });
+    installBridge(bridge);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '교직원 로그인' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '학교 서버 설정 변경' })).toBeInTheDocument();
+  });
+
+  it('hides cached data, opens protected recovery, and clears the administrator password after failure', async () => {
     const blocked: ConnectionState = {
       kind: 'security-blocked',
       code: 'CERTIFICATE_MISMATCH',
     };
-    const { bridge } = createBridge({ restored: session, connection: blocked });
+    const serverChangeError: AppErrorView = {
+      code: 'SERVER_CONFIGURATION_INVALID',
+      category: 'administrator-action-required',
+      message: '관리자 인증에 실패했습니다.',
+    };
+    const { bridge } = createBridge({
+      restored: session,
+      connection: blocked,
+      serverChangeResult: failure(serverChangeError),
+    });
     installBridge(bridge);
 
     render(<App />);
@@ -233,6 +282,42 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: '학교 서버 연결을 차단했습니다' })).toBeInTheDocument();
     expect(screen.queryByText('가정통신문')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '업무 대시보드' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '학교 서버 설정 변경' }));
+    expect(screen.getByRole('heading', { name: '학교 서버 설정 변경' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('새 서버 주소'), {
+      target: { value: 'https://new-school.example/' },
+    });
+    fireEvent.change(screen.getByLabelText('학교 코드'), {
+      target: { value: 'sample-school' },
+    });
+    fireEvent.change(screen.getByLabelText('현재 인증서 지문'), {
+      target: { value: 'A'.repeat(64) },
+    });
+    fireEvent.change(screen.getByLabelText('다음 인증서 지문 (선택)'), {
+      target: { value: 'B'.repeat(64) },
+    });
+    fireEvent.change(screen.getByLabelText('관리자 사용자 이름'), {
+      target: { value: 'administrator' },
+    });
+    fireEvent.change(screen.getByLabelText('관리자 비밀번호'), {
+      target: { value: 'temporary-secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '연결 확인 후 변경' }));
+
+    await waitFor(() => {
+      expect(bridge.settings.requestServerChange).toHaveBeenCalledWith({
+        baseUrl: 'https://new-school.example/',
+        schoolCode: 'sample-school',
+        currentFingerprint: 'A'.repeat(64),
+        nextFingerprint: 'B'.repeat(64),
+        adminUsername: 'administrator',
+        adminPassword: 'temporary-secret',
+      });
+    });
+    expect(screen.getByLabelText('관리자 비밀번호')).toHaveValue('');
+    expect(screen.getByRole('alert')).toHaveTextContent('관리자 인증에 실패했습니다.');
   });
 
   it('logs out and returns to a cleared login screen', async () => {
