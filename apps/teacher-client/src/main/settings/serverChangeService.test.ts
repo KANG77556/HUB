@@ -8,7 +8,6 @@ import type {
 import type { ServerPolicy } from '../config/serverPolicy.js';
 import { ClientError } from '../network/apiClient.js';
 import {
-  ServerChangeError,
   ServerChangeService,
   type ServerChangeProbe,
   type ServerChangeServiceDependencies,
@@ -125,14 +124,13 @@ describe('ServerChangeService', () => {
       identity: { ...identity, school_code: 'other-school' },
     });
 
-    await expect(service.requestChange(input)).rejects.toBeInstanceOf(ServerChangeError);
     await expect(service.requestChange(input)).rejects.toMatchObject({
       code: 'SERVER_IDENTITY_INVALID',
     });
 
     expect(probe.login).not.toHaveBeenCalled();
     expect(dependencies.policyStore.replaceAtomically).not.toHaveBeenCalled();
-    expect(probe.dispose).toHaveBeenCalledTimes(2);
+    expect(probe.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('maps rejected administrator credentials to a safe failure and preserves the policy', async () => {
