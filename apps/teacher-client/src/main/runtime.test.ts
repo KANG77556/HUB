@@ -74,38 +74,51 @@ const online: ConnectionState = {
   lastSyncAt: snapshot.lastSyncAt,
 };
 
-function createHarness(options: {
+type HarnessOptions = {
   liveSession?: SessionView | null;
   cachedSnapshot?: OfflineCacheSnapshot | null;
   startEvents?: SyncServiceEvent[];
-} = {}) {
+};
+
+function createHarness(options: HarnessOptions = {}) {
   const rendererEvents: Array<{ channel: string; payload?: unknown }> = [];
   let syncEmitter: ((event: SyncServiceEvent) => void) | null = null;
   const sync: RuntimeSyncService = {
-    start: vi.fn(async (_initialSession?: SessionView) => {
+    start: vi.fn((initialSession?: SessionView) => {
+      void initialSession;
       for (const event of options.startEvents ?? []) {
         syncEmitter?.(event);
       }
+      return Promise.resolve();
     }),
     stop: vi.fn(),
     getState: vi.fn(() => online),
   };
   const auth = {
-    login: vi.fn(async (_input: LoginInput) => session),
-    logout: vi.fn(async () => undefined),
+    login: vi.fn((input: LoginInput) => {
+      void input;
+      return Promise.resolve(session);
+    }),
+    logout: vi.fn(() => Promise.resolve()),
     getSession: vi.fn(() => options.liveSession ?? session),
   };
   const credentialStore = {
-    readActive: vi.fn(async () => stored),
+    readActive: vi.fn(() => Promise.resolve(stored)),
   };
   const cache = {
-    get: vi.fn((_identity: CacheIdentity) => options.cachedSnapshot ?? snapshot),
+    get: vi.fn((candidate: CacheIdentity) => {
+      void candidate;
+      return options.cachedSnapshot ?? snapshot;
+    }),
   };
   const identityProvider = {
-    forStoredCredential: vi.fn(async () => identity),
+    forStoredCredential: vi.fn(() => Promise.resolve(identity)),
   };
   const settings = {
-    requestServerChange: vi.fn(async (_input: ServerChangeInput) => undefined),
+    requestServerChange: vi.fn((input: ServerChangeInput) => {
+      void input;
+      return Promise.resolve();
+    }),
   };
   const onPolicyChanged = vi.fn();
 
@@ -137,7 +150,9 @@ function createHarness(options: {
     settings,
     onPolicyChanged,
     rendererEvents,
-    emitSync: (event: SyncServiceEvent) => syncEmitter?.(event),
+    emitSync: (event: SyncServiceEvent): void => {
+      syncEmitter?.(event);
+    },
   };
 }
 
