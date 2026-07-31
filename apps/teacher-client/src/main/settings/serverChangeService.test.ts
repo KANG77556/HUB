@@ -5,6 +5,7 @@ import type {
   ServerIdentityResponse,
   TokenPairResponse,
 } from '../../shared/contracts.js';
+import type { ServerPolicy } from '../config/serverPolicy.js';
 import { ClientError } from '../network/apiClient.js';
 import {
   ServerChangeError,
@@ -75,11 +76,14 @@ function createHarness(overrides: {
       : vi.fn<ServerChangeProbe['logout']>().mockRejectedValue(overrides.logoutError),
     dispose: vi.fn<ServerChangeProbe['dispose']>().mockResolvedValue(undefined),
   };
-  const replaceAtomically = overrides.replaceError === undefined
-    ? vi.fn<ServerChangeServiceDependencies['policyStore']['replaceAtomically']>()
-      .mockImplementation((candidate) => Promise.resolve(candidate))
-    : vi.fn<ServerChangeServiceDependencies['policyStore']['replaceAtomically']>()
-      .mockRejectedValue(overrides.replaceError);
+  const replaceAtomically = vi.fn(
+    async (candidate: ServerPolicy): Promise<ServerPolicy> => {
+      if (overrides.replaceError !== undefined) {
+        throw overrides.replaceError;
+      }
+      return candidate;
+    },
+  );
   const dependencies: ServerChangeServiceDependencies = {
     createProbe: vi
       .fn<ServerChangeServiceDependencies['createProbe']>()
@@ -121,13 +125,14 @@ describe('ServerChangeService', () => {
       identity: { ...identity, school_code: 'other-school' },
     });
 
-    await expect(service.requestChange(input)).rejects.toMatchObject<ServerChangeError>({
+    await expect(service.requestChange(input)).rejects.toBeInstanceOf(ServerChangeError);
+    await expect(service.requestChange(input)).rejects.toMatchObject({
       code: 'SERVER_IDENTITY_INVALID',
     });
 
     expect(probe.login).not.toHaveBeenCalled();
     expect(dependencies.policyStore.replaceAtomically).not.toHaveBeenCalled();
-    expect(probe.dispose).toHaveBeenCalledTimes(1);
+    expect(probe.dispose).toHaveBeenCalledTimes(2);
   });
 
   it('maps rejected administrator credentials to a safe failure and preserves the policy', async () => {
@@ -135,7 +140,7 @@ describe('ServerChangeService', () => {
       loginError: new ClientError('AUTHENTICATION_REQUIRED'),
     });
 
-    await expect(service.requestChange(input)).rejects.toMatchObject<ServerChangeError>({
+    await expect(service.requestChange(input)).rejects.toMatchObject({
       code: 'ADMIN_AUTHENTICATION_FAILED',
     });
     expect(dependencies.policyStore.replaceAtomically).not.toHaveBeenCalled();
@@ -146,7 +151,7 @@ describe('ServerChangeService', () => {
       user: { ...administrator, permissions: ['users.manage'] },
     });
 
-    await expect(service.requestChange(input)).rejects.toMatchObject<ServerChangeError>({
+    await expect(service.requestChange(input)).rejects.toMatchObject({
       code: 'ADMIN_PERMISSION_REQUIRED',
     });
 
