@@ -1,12 +1,13 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { SessionView } from '../shared/contracts.js';
+import { AuthService } from './auth/authService.js';
+import { ServerPolicyStore } from './config/serverPolicy.js';
 import type { IpcHandlerServices } from './ipc/registerIpc.js';
 import type { CertificateSession } from './network/certificatePinning.js';
 import { installCertificatePinning } from './network/certificatePinning.js';
 import { ApiClient, ClientError, type Transport } from './network/apiClient.js';
-import { AuthService } from './auth/authService.js';
-import { ServerPolicyStore } from './config/serverPolicy.js';
 import {
   createTeacherClientRuntime,
   type TeacherClientRuntime,
@@ -27,7 +28,6 @@ import {
   type CacheIdentity,
 } from './storage/cacheRepository.js';
 import { SyncService, type SyncServiceEvent } from './sync/syncService.js';
-import type { SessionView } from '../shared/contracts.js';
 
 export type ProductionRuntimeOptions = {
   policyPath: string;
@@ -134,7 +134,9 @@ export async function createProductionTeacherClientRuntime(
         getState: () => sync.getState(),
       };
     },
-    settings,
+    settings: {
+      requestServerChange: (input) => settings.requestChange(input),
+    },
     emitRenderer: options.emitRenderer,
     onPolicyChanged: options.onPolicyChanged,
   });
