@@ -6,12 +6,14 @@ export type LoginScreenProps = {
   message: string | null;
   busy: boolean;
   onLogin: (input: LoginInput) => Promise<void>;
+  onChangeServer: (() => void) | null;
 };
 
 export function LoginScreen({
   message,
   busy,
   onLogin,
+  onChangeServer,
 }: LoginScreenProps): React.JSX.Element {
   const [schoolCode, setSchoolCode] = useState('');
   const [username, setUsername] = useState('');
@@ -99,6 +101,17 @@ export function LoginScreen({
           <button className="primary-button" type="submit" disabled={busy}>
             {busy ? '로그인 중…' : '로그인'}
           </button>
+
+          {onChangeServer === null ? null : (
+            <button
+              className="secondary-button recovery-button"
+              type="button"
+              onClick={onChangeServer}
+              disabled={busy}
+            >
+              학교 서버 설정 변경
+            </button>
+          )}
 
           <p className="login-footnote">
             로그인 정보는 이 화면에 저장되지 않으며, 갱신 자격 증명은
