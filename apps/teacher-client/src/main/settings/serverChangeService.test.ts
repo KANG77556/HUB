@@ -76,11 +76,11 @@ function createHarness(overrides: {
     dispose: vi.fn<ServerChangeProbe['dispose']>().mockResolvedValue(undefined),
   };
   const replaceAtomically = vi.fn(
-    async (candidate: ServerPolicy): Promise<ServerPolicy> => {
+    (candidate: ServerPolicy): Promise<ServerPolicy> => {
       if (overrides.replaceError !== undefined) {
-        throw overrides.replaceError;
+        return Promise.reject(overrides.replaceError);
       }
-      return candidate;
+      return Promise.resolve(candidate);
     },
   );
   const dependencies: ServerChangeServiceDependencies = {
