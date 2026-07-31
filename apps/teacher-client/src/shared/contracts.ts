@@ -105,11 +105,23 @@ export const dashboardResponseSchema = z.object({
 });
 export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
 
+export function normalizeServerFingerprint(value: string): string {
+  return value.replaceAll(':', '').replaceAll(/\s/g, '').toUpperCase();
+}
+
+const serverFingerprintSchema = z
+  .string()
+  .transform(normalizeServerFingerprint)
+  .pipe(z.string().regex(/^[A-F0-9]{64}$/));
+
 export const serverChangeInputSchema = z.object({
-  baseUrl: z.string().url(),
+  baseUrl: z
+    .string()
+    .url()
+    .refine((value) => new URL(value).protocol === 'https:', 'HTTPS is required'),
   schoolCode: z.string().min(2).max(30),
-  currentFingerprint: z.string().regex(/^[A-F0-9]{64}$/),
-  nextFingerprint: z.string().regex(/^[A-F0-9]{64}$/).nullable(),
+  currentFingerprint: serverFingerprintSchema,
+  nextFingerprint: serverFingerprintSchema.nullable(),
   adminUsername: z.string().min(3).max(80),
   adminPassword: z.string().min(1).max(256),
 });
