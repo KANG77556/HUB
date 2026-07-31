@@ -8,7 +8,11 @@ export default tseslint.config(
     files: ['src/**/*.{ts,tsx}', '*.ts'],
     languageOptions: {
       parserOptions: {
-        project: ['./tsconfig.main.json', './tsconfig.renderer.json'],
+        project: [
+          './tsconfig.main.json',
+          './tsconfig.preload.json',
+          './tsconfig.renderer.json',
+        ],
         tsconfigRootDir: import.meta.dirname,
       },
     },
