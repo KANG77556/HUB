@@ -49,7 +49,7 @@ describe('server policy', () => {
     ).toThrow();
   });
 
-  it('writes a normalized mode-0600 policy atomically and preserves it on invalid replacement', async () => {
+  it('writes a normalized private policy atomically and preserves it on invalid replacement', async () => {
     const path = await createPolicyPath();
     const store = new ServerPolicyStore(path);
     const colonSeparated = currentFingerprint.match(/.{2}/g)?.join(':');
@@ -68,7 +68,9 @@ describe('server policy', () => {
       currentFingerprint,
       nextFingerprint,
     });
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
+    }
 
     await expect(
       store.replaceAtomically({
