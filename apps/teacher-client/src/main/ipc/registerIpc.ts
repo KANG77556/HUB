@@ -5,14 +5,17 @@ import {
   connectionStateSchema,
   dashboardSnapshotSchema,
   loginInputSchema,
+  serverChangeInputSchema,
   sessionViewSchema,
   type ConnectionState,
   type DashboardSnapshot,
   type LoginInput,
+  type ServerChangeInput,
   type SessionView,
 } from '../../shared/contracts.js';
 import { appError, type AppErrorView } from '../../shared/errors.js';
 import { ClientError } from '../network/apiClient.js';
+import { ServerChangeError } from '../settings/serverChangeService.js';
 import { IPC_CHANNELS } from './channels.js';
 
 export type IpcInvokeEventPort = {
@@ -41,6 +44,9 @@ export type IpcHandlerServices = {
   };
   connection: {
     getStatus: () => Promise<ConnectionState>;
+  };
+  settings: {
+    requestServerChange: (input: ServerChangeInput) => Promise<void>;
   };
 };
 
@@ -100,12 +106,38 @@ function senderUrl(event: IpcInvokeEventPort): string {
   return event.sender?.getURL() ?? '';
 }
 
+function serverChangeErrorView(error: ServerChangeError): AppErrorView {
+  switch (error.code) {
+    case 'SERVER_IDENTITY_INVALID':
+      return appError(
+        'SERVER_IDENTITY_INVALID',
+        'administrator-action-required',
+        '입력한 주소가 이 학교의 SchoolWorkHub 서버인지 확인할 수 없습니다.',
+      );
+    case 'ADMIN_AUTHENTICATION_FAILED':
+      return appError(
+        'SERVER_CONFIGURATION_INVALID',
+        'administrator-action-required',
+        '관리자 인증에 실패했습니다.',
+      );
+    case 'ADMIN_PERMISSION_REQUIRED':
+      return appError(
+        'SERVER_CONFIGURATION_INVALID',
+        'administrator-action-required',
+        '서버 설정 변경 권한이 필요합니다.',
+      );
+  }
+}
+
 function toPublicError(error: unknown): AppErrorView {
   if (error instanceof BoundaryError) {
     return error.view;
   }
   if (error instanceof z.ZodError) {
     return appError('INVALID_INPUT', 'retryable', '입력값을 확인해 주세요.');
+  }
+  if (error instanceof ServerChangeError) {
+    return serverChangeErrorView(error);
   }
   if (error instanceof ClientError) {
     switch (error.code) {
@@ -281,6 +313,17 @@ export function registerIpcHandlers(
           requireArgumentCount(args, 0);
           return services.connection.getStatus();
         }, connectionStateSchema),
+    ],
+    [
+      IPC_CHANNELS.serverChange,
+      (event, ...args) =>
+        safeResult(async () => {
+          requireTrustedSender(event, validateSenderUrl);
+          requireArgumentCount(args, 1);
+          const input = serverChangeInputSchema.parse(args[0]);
+          await services.settings.requestServerChange(input);
+          return undefined;
+        }, z.undefined()),
     ],
   ]);
 
