@@ -237,55 +237,50 @@ export function registerIpcHandlers(
   const handlers = new Map<string, IpcHandler>([
     [
       IPC_CHANNELS.authLogin,
-      async (event, ...args) => {
-        return safeResult(async () => {
+      (event, ...args) =>
+        safeResult(() => {
           requireTrustedSender(event, validateSenderUrl);
           requireArgumentCount(args, 1);
           const input = loginInputSchema.parse(args[0]);
           return services.auth.login(input);
-        }, sessionViewSchema);
-      },
+        }, sessionViewSchema),
     ],
     [
       IPC_CHANNELS.authRestore,
-      async (event, ...args) => {
-        return safeResult(async () => {
+      (event, ...args) =>
+        safeResult(() => {
           requireTrustedSender(event, validateSenderUrl);
           requireArgumentCount(args, 0);
           return services.auth.restoreSession();
-        }, sessionViewSchema.nullable());
-      },
+        }, sessionViewSchema.nullable()),
     ],
     [
       IPC_CHANNELS.authLogout,
-      async (event, ...args) => {
-        return safeResult(async () => {
+      (event, ...args) =>
+        safeResult(async () => {
           requireTrustedSender(event, validateSenderUrl);
           requireArgumentCount(args, 0);
           await services.auth.logout();
           return undefined;
-        }, z.undefined());
-      },
+        }, z.undefined()),
     ],
     [
       IPC_CHANNELS.dashboardLoad,
-      async (event, ...args) => {
-        return safeResult(async () => {
+      (event, ...args) =>
+        safeResult(() => {
           requireTrustedSender(event, validateSenderUrl);
           requireArgumentCount(args, 0);
           return services.dashboard.load();
-        }, dashboardSnapshotSchema);
-      },
+        }, dashboardSnapshotSchema),
     ],
     [
       IPC_CHANNELS.connectionStatus,
-      async (event, ...args) => {
-        return safeResult(async () => {
+      (event, ...args) =>
+        safeResult(() => {
           requireTrustedSender(event, validateSenderUrl);
           requireArgumentCount(args, 0);
           return services.connection.getStatus();
-        }, connectionStateSchema);
-      },
+        }, connectionStateSchema),
     ],
   ]);
 
