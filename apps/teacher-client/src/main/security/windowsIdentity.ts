@@ -26,7 +26,7 @@ export const nodeCommandRunner: CommandRunner = (
       { encoding: 'utf8', windowsHide: options.windowsHide },
       (error, stdout) => {
         if (error !== null) {
-          reject(error);
+          reject(error instanceof Error ? error : new Error('WHOAMI_EXEC_FAILED'));
           return;
         }
         resolve({ stdout });
