@@ -10,6 +10,7 @@ import {
   type ConnectionState,
   type DashboardSnapshot,
   type LoginInput,
+  type ServerChangeInput,
   type SessionView,
   type SyncSummary,
 } from '../shared/contracts.js';
@@ -72,6 +73,10 @@ export function createSchoolWorkHubBridge(
     connection: {
       getStatus: () =>
         invoke<ConnectionState>(renderer, IPC_CHANNELS.connectionStatus),
+    },
+    settings: {
+      requestServerChange: (input: ServerChangeInput) =>
+        invoke<void>(renderer, IPC_CHANNELS.serverChange, input),
     },
     events: {
       onConnectionChanged: (listener) =>
