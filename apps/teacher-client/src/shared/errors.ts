@@ -5,6 +5,7 @@ export type AppErrorCategory =
   | 'security-blocked';
 
 export type AppErrorCode =
+  | 'INVALID_INPUT'
   | 'NETWORK_UNAVAILABLE'
   | 'SERVER_MAINTENANCE'
   | 'SESSION_INVALID'
