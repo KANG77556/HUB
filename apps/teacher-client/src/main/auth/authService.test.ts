@@ -81,9 +81,9 @@ describe('AuthService', () => {
       userId: currentUser.id,
       refreshToken: firstTokenPair.refresh_token,
     });
-    await expect(service.authenticatedRequest(async (token) => token)).resolves.toBe(
-      'access-token-1',
-    );
+    await expect(
+      service.authenticatedRequest((token) => Promise.resolve(token)),
+    ).resolves.toBe('access-token-1');
   });
 
   it('restores a session by rotating and overwriting the refresh credential', async () => {
@@ -108,12 +108,12 @@ describe('AuthService', () => {
     await service.login({ schoolCode: 'sample-school', username: 'teacher', password: 'password' });
 
     let successfulRetries = 0;
-    const operation = vi.fn(async (token: string) => {
+    const operation = vi.fn((token: string): Promise<string> => {
       if (token === firstTokenPair.access_token) {
-        throw new ClientError('AUTHENTICATION_REQUIRED');
+        return Promise.reject(new ClientError('AUTHENTICATION_REQUIRED'));
       }
       successfulRetries += 1;
-      return token;
+      return Promise.resolve(token);
     });
 
     const results = await Promise.all([
@@ -181,7 +181,9 @@ describe('AuthService', () => {
       schoolCode: 'sample-school',
       userId: currentUser.id,
     });
-    await expect(service.authenticatedRequest(async (token) => token)).rejects.toMatchObject({
+    await expect(
+      service.authenticatedRequest((token) => Promise.resolve(token)),
+    ).rejects.toMatchObject({
       code: 'AUTHENTICATION_REQUIRED',
     });
   });
