@@ -42,6 +42,14 @@ export const dashboardSnapshotSchema = z.object({
 });
 export type DashboardSnapshot = z.infer<typeof dashboardSnapshotSchema>;
 
+export const syncSummarySchema = z.object({
+  newScheduleCount: z.number().int().nonnegative(),
+  changedScheduleCount: z.number().int().nonnegative(),
+  newDocumentCount: z.number().int().nonnegative(),
+  changedSubmissionCount: z.number().int().nonnegative(),
+});
+export type SyncSummary = z.infer<typeof syncSummarySchema>;
+
 export const tokenPairResponseSchema = z.object({
   access_token: z.string().min(1),
   refresh_token: z.string().min(32).max(512),
