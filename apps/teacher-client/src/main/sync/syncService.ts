@@ -179,19 +179,13 @@ export type SyncTimerPort = {
 };
 
 export type SyncServiceEvent =
-  | {
-      type: 'state';
-      state: ConnectionState;
-    }
+  | { type: 'state'; state: ConnectionState }
   | {
       type: 'snapshot';
       snapshot: OfflineCacheSnapshot | null;
       source: 'live' | 'cache';
     }
-  | {
-      type: 'summary';
-      summary: SyncSummary;
-    }
+  | { type: 'summary'; summary: SyncSummary }
   | { type: 'signed-out' };
 
 export type SyncServiceDependencies = {
@@ -226,7 +220,7 @@ export class SyncService {
   };
   private currentSnapshot: OfflineCacheSnapshot | null = null;
   private reconnectAttempt = 0;
-  private reconnectHandle: unknown | null = null;
+  private reconnectHandle: unknown = null;
   private stopped = false;
 
   public constructor(private readonly dependencies: SyncServiceDependencies) {}
@@ -335,9 +329,8 @@ export class SyncService {
     const identity =
       resolvedIdentity ??
       (await this.dependencies.identityProvider.forStoredCredential());
-    const snapshot = identity === null
-      ? null
-      : this.dependencies.cache.get(identity);
+    const snapshot =
+      identity === null ? null : this.dependencies.cache.get(identity);
     this.currentSnapshot = snapshot;
     this.dependencies.emit({
       type: 'snapshot',
@@ -384,7 +377,7 @@ export class SyncService {
     this.reconnectHandle = timer.setTimeout(() => {
       this.reconnectHandle = null;
       void this.retryNow().catch(() => {
-        // Expected connection errors are classified inside retryNow/connect.
+        // Expected connection errors are classified inside connect.
       });
     }, delayMs);
   }
