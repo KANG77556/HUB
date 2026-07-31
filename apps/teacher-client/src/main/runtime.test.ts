@@ -100,7 +100,9 @@ function createHarness(options: HarnessOptions = {}) {
       return Promise.resolve(session);
     }),
     logout: vi.fn(() => Promise.resolve()),
-    getSession: vi.fn(() => options.liveSession ?? session),
+    getSession: vi.fn(() =>
+      options.liveSession === undefined ? session : options.liveSession,
+    ),
   };
   const credentialStore = {
     readActive: vi.fn(() => Promise.resolve(stored)),
