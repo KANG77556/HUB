@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 
 import type { ServerChangeInput } from '../../shared/contracts.js';
+import './ServerChangeDialog.css';
 
 export type ServerChangeDialogProps = {
   busy: boolean;
