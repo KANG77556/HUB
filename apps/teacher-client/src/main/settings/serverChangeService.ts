@@ -117,7 +117,7 @@ export class ServerChangeService {
       if (temporaryRefreshToken !== null) {
         await probe.logout(temporaryRefreshToken).catch(() => undefined);
       }
-      await probe.dispose();
+      await probe.dispose().catch(() => undefined);
     }
   }
 }
