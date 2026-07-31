@@ -1,7 +1,11 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { BrowserWindowConstructorOptions } from 'electron';
+import type {
+  BrowserWindowConstructorOptions,
+  IpcMain,
+  IpcMainInvokeEvent,
+} from 'electron';
 
 import {
   createSenderUrlValidator,
@@ -10,6 +14,11 @@ import {
   type IpcMainPort,
   type IpcInvokeEventPort,
 } from './ipc/registerIpc.js';
+import type {
+  CertificateSession,
+  CertificateVerifyHandler,
+} from './network/certificatePinning.js';
+import type { Transport } from './network/apiClient.js';
 import {
   createProductionTeacherClientRuntime,
   createRecoveryIpcServices,
@@ -49,7 +58,7 @@ export function isAllowedDevelopmentUrl(value: string): boolean {
 }
 
 function createInvokeEventPort(
-  event: import('electron').IpcMainInvokeEvent,
+  event: IpcMainInvokeEvent,
 ): IpcInvokeEventPort {
   return {
     senderFrame:
@@ -58,20 +67,29 @@ function createInvokeEventPort(
   };
 }
 
-function createIpcMainPort(
-  ipcMain: import('electron').IpcMain,
-): IpcMainPort {
+function createIpcMainPort(ipcMain: IpcMain): IpcMainPort {
   return {
     handle: (channel: string, handler: IpcHandler) => {
-      ipcMain.handle(channel, (event, ...args) =>
-        handler(createInvokeEventPort(event), ...args),
-      );
+      const wrapped = (
+        event: IpcMainInvokeEvent,
+        ...args: unknown[]
+      ): Promise<unknown> =>
+        handler(createInvokeEventPort(event), ...args);
+      ipcMain.handle(channel, wrapped);
     },
     removeHandler: (channel: string) => {
       ipcMain.removeHandler(channel);
     },
   };
 }
+
+type ElectronCertificateRequestView = {
+  hostname: string;
+  verificationResult: string;
+  certificate: {
+    fingerprint256: string;
+  };
+};
 
 async function bootstrapElectron(): Promise<void> {
   const {
@@ -85,7 +103,7 @@ async function bootstrapElectron(): Promise<void> {
 
   await app.whenReady();
 
-  const preloadPath = join(import.meta.dirname, '..', 'preload', 'index.js');
+  const preloadPath = join(import.meta.dirname, '..', 'preload', 'index.cjs');
   const rendererPath = join(import.meta.dirname, '..', '..', 'renderer', 'index.html');
   const packagedUrl = pathToFileURL(rendererPath).toString();
   const configuredDevelopmentUrl = process.env.SWH_TEACHER_DEV_URL;
@@ -148,29 +166,18 @@ async function bootstrapElectron(): Promise<void> {
       }
     };
     const defaultSession = session.defaultSession;
-    const certificateSession = {
+    const certificateSession: CertificateSession = {
       setCertificateVerifyProc: (
-        handler: Parameters<
-          typeof import('./network/certificatePinning.js').installCertificatePinning
-        >[0]['setCertificateVerifyProc'] extends (candidate: infer T) => void
-          ? T
-          : never,
+        handler: CertificateVerifyHandler,
       ): void => {
         defaultSession.setCertificateVerifyProc((request, callback) => {
-          handler(
-            {
-              hostname: request.hostname,
-              verificationResult: request.verificationResult,
-              certificate: {
-                fingerprint256: request.certificate.fingerprint256,
-              },
-            },
-            callback,
-          );
+          const requestView =
+            request as unknown as ElectronCertificateRequestView;
+          handler(requestView, callback);
         });
       },
     };
-    const transport = async (url: string, init: RequestInit) => {
+    const transport: Transport = async (url, init) => {
       const response = await defaultSession.fetch(url, init);
       return {
         status: response.status,
