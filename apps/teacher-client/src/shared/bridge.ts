@@ -2,6 +2,7 @@ import type {
   ConnectionState,
   DashboardSnapshot,
   LoginInput,
+  ServerChangeInput,
   SessionView,
   SyncSummary,
 } from './contracts.js';
@@ -22,6 +23,11 @@ export type SchoolWorkHubBridge = {
   };
   connection: {
     getStatus: () => Promise<BridgeResult<ConnectionState>>;
+  };
+  settings: {
+    requestServerChange: (
+      input: ServerChangeInput,
+    ) => Promise<BridgeResult<void>>;
   };
   events: {
     onConnectionChanged: (listener: (state: ConnectionState) => void) => () => void;
