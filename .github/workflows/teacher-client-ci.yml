@@ -73,6 +73,8 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Sandboxed preload and IPC smoke
+        run: npx electron dist/electron/main/scripts/windowsRuntimeSmoke.js
       - name: Windows Credential Manager and DPAPI smoke
         run: npx electron dist/electron/main/scripts/windowsSecuritySmoke.js
       - name: Produce foundation verification report
