@@ -122,6 +122,14 @@ export class ServerChangeService {
   }
 }
 
+type ElectronCertificateRequestView = {
+  hostname: string;
+  verificationResult: string;
+  certificate: {
+    fingerprint256: string;
+  };
+};
+
 export async function createElectronServerChangeProbe(
   policy: ServerPolicy,
 ): Promise<ServerChangeProbe> {
@@ -135,16 +143,8 @@ export async function createElectronServerChangeProbe(
     {
       setCertificateVerifyProc: (handler) => {
         candidateSession.setCertificateVerifyProc((request, callback) => {
-          handler(
-            {
-              hostname: request.hostname,
-              verificationResult: request.verificationResult,
-              certificate: {
-                fingerprint256: request.certificate.fingerprint256,
-              },
-            },
-            callback,
-          );
+          const requestView = request as unknown as ElectronCertificateRequestView;
+          handler(requestView, callback);
         });
       },
     },
