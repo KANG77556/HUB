@@ -54,6 +54,7 @@ function createHarness(overrides: {
   loginError?: Error;
   user?: CurrentUserResponse;
   logoutError?: Error;
+  disposeError?: Error;
   replaceError?: Error;
 } = {}): {
   service: ServerChangeService;
@@ -73,7 +74,9 @@ function createHarness(overrides: {
     logout: overrides.logoutError === undefined
       ? vi.fn<ServerChangeProbe['logout']>().mockResolvedValue(undefined)
       : vi.fn<ServerChangeProbe['logout']>().mockRejectedValue(overrides.logoutError),
-    dispose: vi.fn<ServerChangeProbe['dispose']>().mockResolvedValue(undefined),
+    dispose: overrides.disposeError === undefined
+      ? vi.fn<ServerChangeProbe['dispose']>().mockResolvedValue(undefined)
+      : vi.fn<ServerChangeProbe['dispose']>().mockRejectedValue(overrides.disposeError),
   };
   const replaceAtomically = vi.fn(
     (candidate: ServerPolicy): Promise<ServerPolicy> => {
@@ -179,5 +182,16 @@ describe('ServerChangeService', () => {
     await expect(service.requestChange(input)).rejects.toBe(writeFailure);
     expect(dependencies.policyStore.replaceAtomically).toHaveBeenCalledTimes(1);
     expect(input.adminPassword).toBe('correct horse battery staple');
+  });
+
+  it('keeps a successful policy replacement successful when temporary session cleanup fails', async () => {
+    const { service, probe, dependencies } = createHarness({
+      disposeError: new Error('temporary session cleanup failed'),
+    });
+
+    await expect(service.requestChange(input)).resolves.toBeUndefined();
+
+    expect(dependencies.policyStore.replaceAtomically).toHaveBeenCalledTimes(1);
+    expect(probe.dispose).toHaveBeenCalledTimes(1);
   });
 });
