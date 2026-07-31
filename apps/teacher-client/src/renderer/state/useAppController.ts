@@ -4,6 +4,7 @@ import type {
   ConnectionState,
   DashboardSnapshot,
   LoginInput,
+  ServerChangeInput,
   SessionView,
   SyncSummary,
 } from '../../shared/contracts.js';
@@ -11,7 +12,11 @@ import type { AppErrorView } from '../../shared/errors.js';
 
 export type AppState =
   | { kind: 'restoring' }
-  | { kind: 'signed-out'; message: string | null }
+  | {
+      kind: 'signed-out';
+      message: string | null;
+      canChangeServer: boolean;
+    }
   | {
       kind: 'ready';
       session: SessionView;
@@ -24,12 +29,22 @@ export type AppController = {
   state: AppState;
   summary: SyncSummary | null;
   busy: boolean;
+  serverChangeError: string | null;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
+  requestServerChange: (input: ServerChangeInput) => Promise<boolean>;
+  clearServerChangeError: () => void;
 };
 
 function errorMessage(error: AppErrorView): string {
   return error.message;
+}
+
+function allowsServerRecovery(error: AppErrorView): boolean {
+  return (
+    error.category === 'administrator-action-required' ||
+    error.category === 'security-blocked'
+  );
 }
 
 function unexpectedMessage(): string {
@@ -40,6 +55,7 @@ export function useAppController(): AppController {
   const [state, setState] = useState<AppState>({ kind: 'restoring' });
   const [summary, setSummary] = useState<SyncSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const [serverChangeError, setServerChangeError] = useState<string | null>(null);
 
   const loadReadyState = useCallback(async (session: SessionView): Promise<void> => {
     try {
@@ -52,6 +68,7 @@ export function useAppController(): AppController {
         setState({
           kind: 'signed-out',
           message: errorMessage(connectionResult.error),
+          canChangeServer: allowsServerRecovery(connectionResult.error),
         });
         return;
       }
@@ -66,6 +83,7 @@ export function useAppController(): AppController {
         setState({
           kind: 'signed-out',
           message: errorMessage(dashboardResult.error),
+          canChangeServer: allowsServerRecovery(dashboardResult.error),
         });
         return;
       }
@@ -77,7 +95,11 @@ export function useAppController(): AppController {
         connection: connectionResult.value,
       });
     } catch {
-      setState({ kind: 'signed-out', message: unexpectedMessage() });
+      setState({
+        kind: 'signed-out',
+        message: unexpectedMessage(),
+        canChangeServer: false,
+      });
     }
   }, []);
 
@@ -90,6 +112,7 @@ export function useAppController(): AppController {
         }
         if (connection.kind === 'security-blocked') {
           setSummary(null);
+          setServerChangeError(null);
           setState({ kind: 'security-blocked', code: connection.code });
           return;
         }
@@ -111,9 +134,11 @@ export function useAppController(): AppController {
       () => {
         if (active) {
           setSummary(null);
+          setServerChangeError(null);
           setState({
             kind: 'signed-out',
             message: '로그인이 만료되었습니다. 다시 로그인해 주세요.',
+            canChangeServer: false,
           });
         }
       },
@@ -129,17 +154,26 @@ export function useAppController(): AppController {
           setState({
             kind: 'signed-out',
             message: errorMessage(result.error),
+            canChangeServer: allowsServerRecovery(result.error),
           });
           return;
         }
         if (result.value === null) {
-          setState({ kind: 'signed-out', message: null });
+          setState({
+            kind: 'signed-out',
+            message: null,
+            canChangeServer: false,
+          });
           return;
         }
         await loadReadyState(result.value);
       } catch {
         if (active) {
-          setState({ kind: 'signed-out', message: unexpectedMessage() });
+          setState({
+            kind: 'signed-out',
+            message: unexpectedMessage(),
+            canChangeServer: false,
+          });
         }
       }
     })();
@@ -156,18 +190,24 @@ export function useAppController(): AppController {
     async (input: LoginInput): Promise<void> => {
       setBusy(true);
       setSummary(null);
+      setServerChangeError(null);
       try {
         const result = await window.schoolWorkHub.auth.login(input);
         if (!result.ok) {
           setState({
             kind: 'signed-out',
             message: errorMessage(result.error),
+            canChangeServer: allowsServerRecovery(result.error),
           });
           return;
         }
         await loadReadyState(result.value);
       } catch {
-        setState({ kind: 'signed-out', message: unexpectedMessage() });
+        setState({
+          kind: 'signed-out',
+          message: unexpectedMessage(),
+          canChangeServer: false,
+        });
       } finally {
         setBusy(false);
       }
@@ -178,6 +218,7 @@ export function useAppController(): AppController {
   const logout = useCallback(async (): Promise<void> => {
     setBusy(true);
     setSummary(null);
+    setServerChangeError(null);
     let message: string | null = null;
     try {
       const result = await window.schoolWorkHub.auth.logout();
@@ -187,10 +228,50 @@ export function useAppController(): AppController {
     } catch {
       message = unexpectedMessage();
     } finally {
-      setState({ kind: 'signed-out', message });
+      setState({ kind: 'signed-out', message, canChangeServer: false });
       setBusy(false);
     }
   }, []);
 
-  return { state, summary, busy, login, logout };
+  const requestServerChange = useCallback(
+    async (input: ServerChangeInput): Promise<boolean> => {
+      setBusy(true);
+      setServerChangeError(null);
+      try {
+        const result = await window.schoolWorkHub.settings.requestServerChange(input);
+        if (!result.ok) {
+          setServerChangeError(errorMessage(result.error));
+          return false;
+        }
+        setSummary(null);
+        setState({
+          kind: 'signed-out',
+          message: '학교 서버 설정을 변경했습니다. 교직원 계정으로 다시 로그인해 주세요.',
+          canChangeServer: false,
+        });
+        return true;
+      } catch {
+        setServerChangeError(unexpectedMessage());
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
+
+  const clearServerChangeError = useCallback((): void => {
+    setServerChangeError(null);
+  }, []);
+
+  return {
+    state,
+    summary,
+    busy,
+    serverChangeError,
+    login,
+    logout,
+    requestServerChange,
+    clearServerChangeError,
+  };
 }
