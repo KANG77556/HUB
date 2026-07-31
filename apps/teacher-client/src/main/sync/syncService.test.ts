@@ -79,25 +79,18 @@ const cachedSnapshot: OfflineCacheSnapshot = {
   lastSyncAt: '2026-07-30T03:00:00.000Z',
 };
 
-describe('connection reducer', () => {
-  it('covers online, offline, reconnecting, and policy recovery transitions', () => {
+describe('sync state helpers', () => {
+  it('covers online, offline, reconnecting, policy recovery, and sticky blocking', () => {
     const offline: ConnectionState = {
       kind: 'offline-readonly',
       lastSyncAt: cachedSnapshot.lastSyncAt,
     };
-    expect(
-      reduceConnection(offline, {
-        type: 'RECONNECT_STARTED',
-      }),
-    ).toEqual({
+    expect(reduceConnection(offline, { type: 'RECONNECT_STARTED' })).toEqual({
       kind: 'reconnecting',
       lastSyncAt: cachedSnapshot.lastSyncAt,
     });
     expect(
-      reduceConnection(offline, {
-        type: 'LIVE_SYNCED',
-        lastSyncAt,
-      }),
+      reduceConnection(offline, { type: 'LIVE_SYNCED', lastSyncAt }),
     ).toEqual({ kind: 'online', lastSyncAt });
     expect(
       reduceConnection(
@@ -105,24 +98,7 @@ describe('connection reducer', () => {
         { type: 'NETWORK_FAILED' },
       ),
     ).toEqual({ kind: 'offline-readonly', lastSyncAt });
-    expect(
-      reduceConnection(
-        {
-          kind: 'security-blocked',
-          code: 'CERTIFICATE_MISMATCH',
-        },
-        {
-          type: 'POLICY_VALIDATED',
-          lastSyncAt: cachedSnapshot.lastSyncAt,
-        },
-      ),
-    ).toEqual({
-      kind: 'offline-readonly',
-      lastSyncAt: cachedSnapshot.lastSyncAt,
-    });
-  });
 
-  it('keeps security-blocked sticky until a newly validated policy arrives', () => {
     const blocked: ConnectionState = {
       kind: 'security-blocked',
       code: 'CERTIFICATE_MISMATCH',
@@ -131,13 +107,17 @@ describe('connection reducer', () => {
       blocked,
     );
     expect(
-      reduceConnection(blocked, { type: 'LIVE_SYNCED', lastSyncAt }),
-    ).toEqual(blocked);
+      reduceConnection(blocked, {
+        type: 'POLICY_VALIDATED',
+        lastSyncAt: cachedSnapshot.lastSyncAt,
+      }),
+    ).toEqual({
+      kind: 'offline-readonly',
+      lastSyncAt: cachedSnapshot.lastSyncAt,
+    });
   });
-});
 
-describe('sync helpers', () => {
-  it('uses capped reconnect delays', () => {
+  it('caps reconnect delay and summarizes stable-ID changes', () => {
     expect([0, 1, 2, 3, 4, 8].map(reconnectDelayMs)).toEqual([
       5_000,
       15_000,
@@ -146,9 +126,6 @@ describe('sync helpers', () => {
       60_000,
       60_000,
     ]);
-  });
-
-  it('summarizes new and changed stable IDs without counting unchanged data', () => {
     const next: OfflineCacheSnapshot = {
       ...cachedSnapshot,
       scheduleItems: [
@@ -175,7 +152,6 @@ describe('sync helpers', () => {
       submissionSummary: { pendingCount: 2 },
       lastSyncAt,
     };
-
     expect(computeSyncSummary(cachedSnapshot, next)).toEqual({
       newScheduleCount: 1,
       changedScheduleCount: 1,
@@ -185,61 +161,28 @@ describe('sync helpers', () => {
   });
 });
 
-type ScheduledTimer = {
-  callback: () => void;
-  delayMs: number;
-};
+type RestoreResult = SessionView | null | ClientError;
+type ScheduledTimer = { callback: () => void; delayMs: number };
 
-function createTimer(): {
-  timer: SyncTimerPort;
-  scheduled: ScheduledTimer[];
-  cleared: unknown[];
-} {
-  const scheduled: ScheduledTimer[] = [];
-  const cleared: unknown[] = [];
-  const timer: SyncTimerPort = {
-    setTimeout: (callback, delayMs) => {
-      const handle = { callback, delayMs };
-      scheduled.push(handle);
-      return handle;
-    },
-    clearTimeout: (handle) => {
-      cleared.push(handle);
-    },
-  };
-  return { timer, scheduled, cleared };
-}
-
-function createService(options: {
-  restoreResults?: Array<SessionView | null | ClientError>;
+function createFixture(options: {
+  restoreResults?: RestoreResult[];
   cached?: OfflineCacheSnapshot | null;
-  dashboard?: DashboardResponse;
-} = {}): {
-  service: SyncService;
-  events: SyncServiceEvent[];
-  cachePut: ReturnType<typeof vi.fn<SyncCachePort['put']>>;
-  cacheGet: ReturnType<typeof vi.fn<SyncCachePort['get']>>;
-  getDashboard: ReturnType<typeof vi.fn<DashboardApiPort['getDashboard']>>;
-  scheduled: ScheduledTimer[];
-  cleared: unknown[];
-  order: string[];
-} {
+} = {}) {
   const restoreResults = [...(options.restoreResults ?? [session])];
   const restoreSession: SyncAuthPort['restoreSession'] = () => {
-    const result = restoreResults.shift() ?? session;
+    const result =
+      restoreResults.length === 0 ? session : restoreResults.shift()!;
     return result instanceof ClientError
       ? Promise.reject(result)
       : Promise.resolve(result);
   };
-  const authenticatedRequest: SyncAuthPort['authenticatedRequest'] = (operation) =>
-    operation('access-token');
-  const auth: SyncAuthPort = {
-    restoreSession,
-    authenticatedRequest,
-  };
+  const authenticatedRequest: SyncAuthPort['authenticatedRequest'] =
+    (operation) => operation('access-token');
+  const auth: SyncAuthPort = { restoreSession, authenticatedRequest };
+
   const getDashboard = vi
     .fn<DashboardApiPort['getDashboard']>()
-    .mockResolvedValue(options.dashboard ?? liveDashboard);
+    .mockResolvedValue(liveDashboard);
   const api: DashboardApiPort = { getDashboard };
   const order: string[] = [];
   const cacheGet = vi
@@ -253,20 +196,37 @@ function createService(options: {
     forSession: () => Promise.resolve(identity),
     forStoredCredential: () => Promise.resolve(identity),
   };
+
+  const scheduled: ScheduledTimer[] = [];
+  const cleared: unknown[] = [];
+  const timer: SyncTimerPort = {
+    setTimeout: (callback, delayMs) => {
+      const handle = { callback, delayMs };
+      scheduled.push(handle);
+      return handle;
+    },
+    clearTimeout: (handle) => {
+      cleared.push(handle);
+    },
+  };
   const events: SyncServiceEvent[] = [];
   const emit = (event: SyncServiceEvent): void => {
     events.push(event);
     order.push(`event:${event.type}`);
   };
-  const { timer, scheduled, cleared } = createTimer();
+  const service = new SyncService({
+    auth,
+    api,
+    cache,
+    identityProvider,
+    emit,
+    timer,
+  });
   return {
-    service: new SyncService(
-      { auth, api, cache, identityProvider, emit, timer },
-    ),
+    service,
     events,
-    cachePut,
     cacheGet,
-    getDashboard,
+    cachePut,
     scheduled,
     cleared,
     order,
@@ -274,81 +234,77 @@ function createService(options: {
 }
 
 describe('SyncService', () => {
-  it('writes a live snapshot before publishing online state', async () => {
-    const { service, events, cachePut, order } = createService();
+  it('writes live data before publishing online state', async () => {
+    const fixture = createFixture();
+    await fixture.service.start();
 
-    await service.start();
-
-    expect(cachePut).toHaveBeenCalledTimes(1);
-    expect(events.at(-1)).toEqual({
+    expect(fixture.cachePut).toHaveBeenCalledTimes(1);
+    expect(fixture.order.indexOf('cache-put')).toBeLessThan(
+      fixture.order.indexOf('event:snapshot'),
+    );
+    expect(fixture.events.at(-1)).toEqual({
       type: 'state',
       state: { kind: 'online', lastSyncAt },
     });
-    expect(order.indexOf('cache-put')).toBeLessThan(
-      order.indexOf('event:snapshot'),
-    );
   });
 
-  it('falls back to an identity-matched cache and schedules reconnect on startup network failure', async () => {
-    const { service, events, scheduled, cacheGet } = createService({
+  it('uses cached read-only data and schedules reconnect on network failure', async () => {
+    const fixture = createFixture({
       restoreResults: [new ClientError('NETWORK_UNAVAILABLE')],
       cached: cachedSnapshot,
     });
+    await fixture.service.start();
 
-    await service.start();
-
-    expect(cacheGet).toHaveBeenCalledWith(identity);
-    expect(events).toContainEqual({
+    expect(fixture.cacheGet).toHaveBeenCalledWith(identity);
+    expect(fixture.events).toContainEqual({
       type: 'snapshot',
       snapshot: cachedSnapshot,
       source: 'cache',
     });
-    expect(events).toContainEqual({
+    expect(fixture.events).toContainEqual({
       type: 'state',
       state: {
         kind: 'offline-readonly',
         lastSyncAt: cachedSnapshot.lastSyncAt,
       },
     });
-    expect(scheduled.map(({ delayMs }) => delayMs)).toEqual([5_000]);
+    expect(fixture.scheduled.map(({ delayMs }) => delayMs)).toEqual([5_000]);
   });
 
-  it('publishes a null read-only snapshot when no offline cache exists', async () => {
-    const { service, events } = createService({
+  it('publishes a null read-only snapshot when no cache exists', async () => {
+    const fixture = createFixture({
       restoreResults: [new ClientError('NETWORK_UNAVAILABLE')],
       cached: null,
     });
+    await fixture.service.start();
 
-    await service.start();
-
-    expect(events).toContainEqual({
+    expect(fixture.events).toContainEqual({
       type: 'snapshot',
       snapshot: null,
       source: 'cache',
     });
-    expect(events).toContainEqual({
+    expect(fixture.events).toContainEqual({
       type: 'state',
       state: { kind: 'offline-readonly', lastSyncAt: null },
     });
   });
 
-  it('reconnects in the background, updates cache, and emits a change summary', async () => {
-    const { service, events, cachePut, scheduled } = createService({
+  it('reconnects, updates cache, and emits a change summary', async () => {
+    const fixture = createFixture({
       restoreResults: [new ClientError('NETWORK_UNAVAILABLE'), session],
       cached: cachedSnapshot,
     });
-    await service.start();
+    await fixture.service.start();
+    await fixture.service.retryNow();
 
-    await service.retryNow();
-
-    expect(events).toContainEqual({
+    expect(fixture.events).toContainEqual({
       type: 'state',
       state: {
         kind: 'reconnecting',
         lastSyncAt: cachedSnapshot.lastSyncAt,
       },
     });
-    expect(events).toContainEqual({
+    expect(fixture.events).toContainEqual({
       type: 'summary',
       summary: {
         newScheduleCount: 0,
@@ -357,45 +313,40 @@ describe('SyncService', () => {
         changedSubmissionCount: 1,
       },
     });
-    expect(events.at(-1)).toEqual({
+    expect(fixture.events.at(-1)).toEqual({
       type: 'state',
       state: { kind: 'online', lastSyncAt },
     });
-    expect(cachePut).toHaveBeenCalledTimes(1);
-    expect(scheduled).toHaveLength(1);
   });
 
-  it('hard-blocks certificate failures without opening the cache', async () => {
-    const { service, events, cacheGet, scheduled } = createService({
+  it('hard-blocks certificate failures without opening cache', async () => {
+    const fixture = createFixture({
       restoreResults: [new ClientError('SECURITY_BLOCKED')],
       cached: cachedSnapshot,
     });
+    await fixture.service.start();
 
-    await service.start();
-
-    expect(cacheGet).not.toHaveBeenCalled();
-    expect(events.at(-1)).toEqual({
+    expect(fixture.cacheGet).not.toHaveBeenCalled();
+    expect(fixture.scheduled).toHaveLength(0);
+    expect(fixture.events.at(-1)).toEqual({
       type: 'state',
       state: {
         kind: 'security-blocked',
         code: 'CERTIFICATE_MISMATCH',
       },
     });
-    expect(scheduled).toHaveLength(0);
   });
 
-  it('emits signed-out on refresh rejection and cancels future reconnects', async () => {
-    const { service, events, scheduled, cleared } = createService({
+  it('cancels reconnect on stop and emits signed-out on auth rejection', async () => {
+    const offline = createFixture({
       restoreResults: [new ClientError('NETWORK_UNAVAILABLE')],
       cached: cachedSnapshot,
     });
-    await service.start();
-    expect(scheduled).toHaveLength(1);
+    await offline.service.start();
+    offline.service.stop();
+    expect(offline.cleared).toHaveLength(1);
 
-    service.stop();
-
-    expect(cleared).toHaveLength(1);
-    const rejected = createService({
+    const rejected = createFixture({
       restoreResults: [new ClientError('AUTHENTICATION_REQUIRED')],
     });
     await rejected.service.start();
