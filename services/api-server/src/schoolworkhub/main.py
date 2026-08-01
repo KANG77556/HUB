@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from schoolworkhub.db.session import dispose_engine, ping_database
-from schoolworkhub.routers import admin, auth, dashboard, setup, system
+from schoolworkhub.routers import admin, auth, dashboard, knowledge, setup, system
 
 
 class HealthResponse(BaseModel):
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(system.router)
     app.include_router(dashboard.router)
+    app.include_router(knowledge.router)
 
     @app.get("/health/live", response_model=HealthResponse, tags=["health"])
     async def health_live() -> HealthResponse:
