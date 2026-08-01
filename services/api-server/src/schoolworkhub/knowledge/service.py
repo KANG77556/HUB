@@ -68,7 +68,10 @@ class KnowledgeService:
     ) -> KnowledgeDocumentResponse:
         document = await self._get_required(actor.school_id, document_id)
         if not actor.is_superuser and document.author_id != actor.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient permission")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="insufficient permission",
+            )
         if document.revision != command.revision:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -100,7 +103,10 @@ class KnowledgeService:
         document = await self._get_required(actor.school_id, document_id)
         version = await self.repository.get_version(actor.school_id, document.current_version_id)
         if version is None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="document version missing")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="document version missing",
+            )
         return await self._response(document, body=version.body)
 
     async def list_documents(
