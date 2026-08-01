@@ -14,7 +14,7 @@ from schoolworkhub.knowledge.schemas import (
 from schoolworkhub.knowledge.service import KnowledgeService
 from schoolworkhub.models import User
 from schoolworkhub.permissions import require_permission
-from schoolworkhub.routers.auth import CurrentUserDep, SessionDep
+from schoolworkhub.routers.auth import SessionDep
 
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
 CreateActorDep = Annotated[User, Depends(require_permission("knowledge.create"))]
@@ -22,7 +22,11 @@ ReadActorDep = Annotated[User, Depends(require_permission("knowledge.read"))]
 EditActorDep = Annotated[User, Depends(require_permission("knowledge.edit.own"))]
 
 
-@router.post("/documents", response_model=KnowledgeDocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/documents",
+    response_model=KnowledgeDocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_document(
     payload: CreateKnowledgeDocumentRequest,
     actor: CreateActorDep,
