@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
@@ -22,13 +23,14 @@ class KnowledgeRepository:
         self.session = session
 
     async def get_document(self, school_id: UUID, document_id: UUID) -> KnowledgeDocument | None:
-        return await self.session.scalar(
+        result = await self.session.scalar(
             select(KnowledgeDocument).where(
                 KnowledgeDocument.id == document_id,
                 KnowledgeDocument.school_id == school_id,
                 KnowledgeDocument.status != KnowledgeStatus.TRASHED,
             )
         )
+        return cast(KnowledgeDocument | None, result)
 
     async def list_documents(
         self,
@@ -65,12 +67,13 @@ class KnowledgeRepository:
     ) -> KnowledgeDocumentVersion | None:
         if version_id is None:
             return None
-        return await self.session.scalar(
+        result = await self.session.scalar(
             select(KnowledgeDocumentVersion).where(
                 KnowledgeDocumentVersion.id == version_id,
                 KnowledgeDocumentVersion.school_id == school_id,
             )
         )
+        return cast(KnowledgeDocumentVersion | None, result)
 
     async def next_version_number(self, document_id: UUID) -> int:
         current = await self.session.scalar(
