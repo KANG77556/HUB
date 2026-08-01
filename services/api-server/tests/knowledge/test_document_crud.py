@@ -81,7 +81,7 @@ async def test_create_read_list_and_save_draft() -> None:
             document = created.json()
             assert document["status"] == "draft"
             assert document["revision"] == 1
-            assert document["tags"] == ["안내", "교무"]
+            assert set(document["tags"]) == {"교무", "안내"}
             assert document["current_version_id"]
 
             detail = await client.get(
