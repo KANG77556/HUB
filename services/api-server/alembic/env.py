@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from schoolworkhub import models  # noqa: F401
 from schoolworkhub.db.base import Base
+from schoolworkhub.knowledge import models as knowledge_models  # noqa: F401
 from schoolworkhub.settings import get_settings
 
 config = context.config
