@@ -1,0 +1,38 @@
+name: Build Premium Watch Face APKs
+
+on:
+  push:
+    branches: [wearos-navitimer-watchface]
+    paths:
+      - 'wearos-navitimer-watchface/**'
+      - '.github/workflows/build-watchface.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wearos-navitimer-watchface
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Unit tests
+        run: gradle :mobile:testDebugUnitTest :wear:testDebugUnitTest --stacktrace
+      - name: Build APKs
+        run: gradle :mobile:assembleDebug :wear:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: premium-watchface-mobile-apk
+          path: wearos-navitimer-watchface/mobile/build/outputs/apk/debug/mobile-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: premium-watchface-wear-apk
+          path: wearos-navitimer-watchface/wear/build/outputs/apk/debug/wear-debug.apk
