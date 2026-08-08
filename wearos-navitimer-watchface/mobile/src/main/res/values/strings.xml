@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Premium Watch Face</string>
+    <string name="preview_title">BLACK · ROSE GOLD</string>
+    <string name="preview_brand">BREITLING</string>
+    <string name="aod_label">Always-on display</string>
+    <string name="apply_watch">Apply to watch</string>
+    <string name="status_ready">Ready to send settings</string>
+</resources>
