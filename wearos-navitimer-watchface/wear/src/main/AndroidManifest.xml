@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.hardware.type.watch" />
+    <application android:label="Premium Chronograph" android:theme="@android:style/Theme.DeviceDefault">
+        <property android:name="com.google.wear.watchface.format.version" android:value="1" />
+        <service
+            android:name=".WatchConfigListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/watchface/config" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
