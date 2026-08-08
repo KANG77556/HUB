@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#050505">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:gravity="center_horizontal" android:padding="24dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="PREMIUM WATCH FACE" android:textColor="#D7A07A" android:textSize="22sp" android:textStyle="bold" android:layout_marginTop="24dp" />
+        <FrameLayout android:layout_width="280dp" android:layout_height="280dp" android:layout_marginTop="24dp"
+            android:background="@drawable/watch_preview">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="top|center_horizontal"
+                android:gravity="center" android:layout_marginTop="58dp" android:text="@string/preview_brand" android:textColor="#D7A07A" android:textStyle="bold" android:textSize="18sp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="center"
+                android:gravity="center" android:text="10:08" android:textColor="#E8DDD6" android:textSize="44sp" android:textStyle="bold" />
+        </FrameLayout>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="18dp"
+            android:text="@string/preview_title" android:textColor="#C6B7AE" android:textSize="14sp" />
+        <Switch android:id="@+id/aodSwitch" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="28dp" android:text="@string/aod_label" android:textColor="#F0E7E1" android:checked="true" />
+        <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" android:text="@string/status_ready" android:textColor="#B8AAA2" android:gravity="center" />
+        <Button android:id="@+id/applyButton" android:layout_width="match_parent" android:layout_height="56dp"
+            android:layout_marginTop="18dp" android:text="@string/apply_watch" android:contentDescription="Apply watch face settings to paired watch" />
+    </LinearLayout>
+</ScrollView>
