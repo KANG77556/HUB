@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WatchFace width="450" height="450">
+    <Scene backgroundColor="#000000">
+        <AnalogClock x="0" y="0" width="450" height="450">
+            <HourHand resource="hour_hand" x="0" y="0" width="450" height="450" pivotX="0.5" pivotY="0.5" />
+            <MinuteHand resource="minute_hand" x="0" y="0" width="450" height="450" pivotX="0.5" pivotY="0.5" />
+        </AnalogClock>
+    </Scene>
+</WatchFace>
