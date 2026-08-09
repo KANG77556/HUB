@@ -13,13 +13,18 @@ class WatchConfigListenerService : WearableListenerService() {
             if (item.uri.path != WatchConfig.PATH) return@forEach
 
             val map = DataMapItem.fromDataItem(item).dataMap
-            val styleId = map.getString(WatchConfig.KEY_STYLE_ID) ?: WatchConfig.DEFAULT_STYLE_ID
-            val aodEnabled = map.getBoolean(WatchConfig.KEY_AOD_ENABLED, WatchConfig.DEFAULT_AOD_ENABLED)
+            val defaults = WatchConfig()
+            val version = map.getInt(WatchConfig.KEY_VERSION, defaults.version)
+            if (version != defaults.version) return@forEach
+
+            val style = map.getString(WatchConfig.KEY_STYLE) ?: defaults.style
+            val aod = map.getBoolean(WatchConfig.KEY_AOD, defaults.aod)
 
             getSharedPreferences("watch_config", MODE_PRIVATE)
                 .edit()
-                .putString(WatchConfig.KEY_STYLE_ID, styleId)
-                .putBoolean(WatchConfig.KEY_AOD_ENABLED, aodEnabled)
+                .putInt(WatchConfig.KEY_VERSION, version)
+                .putString(WatchConfig.KEY_STYLE, style)
+                .putBoolean(WatchConfig.KEY_AOD, aod)
                 .apply()
         }
     }
