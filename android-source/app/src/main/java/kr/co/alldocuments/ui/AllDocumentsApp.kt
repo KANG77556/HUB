@@ -1,6 +1,7 @@
 package kr.co.alldocuments.ui
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import kr.co.alldocuments.domain.DocumentItem
+import kr.co.alldocuments.domain.DocumentMimeResolver
 import kr.co.alldocuments.domain.DocumentType
 
 @Composable
@@ -55,43 +57,41 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
     }
 
     fun openDocument(item: DocumentItem) {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(Uri.parse(item.uri), item.mimeType ?: "*/*")
+        val originalUri = Uri.parse(item.uri)
+        val mimeType = DocumentMimeResolver.resolve(item.name, item.mimeType)
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(originalUri, mimeType)
+            clipData = ClipData.newRawUri(item.name, originalUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+        }
+        val chooser = Intent.createChooser(viewIntent, "원본 문서로 열기").apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         try {
-            context.startActivity(intent)
+            context.startActivity(chooser)
         } catch (_: ActivityNotFoundException) {
-            scope.launch { snackbarHostState.showSnackbar("이 문서를 열 수 있는 앱이 설치되어 있지 않습니다.") }
+            scope.launch { snackbarHostState.showSnackbar("이 원본 문서를 열 수 있는 호환 앱이 설치되어 있지 않습니다.") }
         } catch (_: Exception) {
-            scope.launch { snackbarHostState.showSnackbar("문서를 열 수 없습니다.") }
+            scope.launch { snackbarHostState.showSnackbar("원본 문서를 열 수 없습니다.") }
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 18.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("모든 문서", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text("내 문서를 한곳에서 찾고 열기", style = MaterialTheme.typography.bodyMedium)
+                        Text("원본 문서를 변환 없이 호환 앱으로 열기", style = MaterialTheme.typography.bodyMedium)
                     }
                     Button(onClick = { picker.launch(arrayOf("*/*")) }) { Text("문서 추가") }
                 }
             }
-
             item {
                 OutlinedTextField(
                     value = state.query,
@@ -102,39 +102,24 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
                     shape = RoundedCornerShape(16.dp)
                 )
             }
-
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(DocumentType.entries) { type ->
-                        FilterChip(
-                            selected = state.selectedType == type,
-                            onClick = { viewModel.setType(type) },
-                            label = { Text(type.label) }
-                        )
+                        FilterChip(selected = state.selectedType == type, onClick = { viewModel.setType(type) }, label = { Text(type.label) })
                     }
                 }
             }
-
             if (state.documents.isEmpty()) {
-                item {
-                    EmptyState(onAdd = { picker.launch(arrayOf("*/*")) })
-                }
+                item { EmptyState(onAdd = { picker.launch(arrayOf("*/*")) }) }
             } else {
                 if (state.query.isBlank() && state.selectedType == DocumentType.ALL) {
-                    item {
-                        Text("최근 문서", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    }
+                    item { Text("최근 문서", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
                     items(state.recentDocuments, key = { "recent-${it.id}" }) { item ->
                         DocumentCard(item, viewModel::toggleFavorite) { openDocument(item) }
                     }
                 }
-
                 item {
-                    Text(
-                        "문서 ${state.filteredDocuments.size}개 · 즐겨찾기 ${state.favoriteCount}개",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("문서 ${state.filteredDocuments.size}개 · 즐겨찾기 ${state.favoriteCount}개", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 }
                 if (state.filteredDocuments.isEmpty()) {
                     item { Text("검색 조건에 맞는 문서가 없습니다.", modifier = Modifier.padding(vertical = 24.dp)) }
@@ -144,7 +129,6 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
                     }
                 }
             }
-
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
@@ -155,40 +139,21 @@ private fun EmptyState(onAdd: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("아직 추가된 문서가 없습니다.", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("PDF, Word, Excel, PowerPoint, 텍스트 파일을 추가해 보세요.")
+            Text("PDF, Word, Excel, PowerPoint, HWP/HWPX, 텍스트와 이미지 파일을 추가할 수 있습니다.")
             Button(onClick = onAdd) { Text("첫 문서 추가") }
         }
     }
 }
 
 @Composable
-private fun DocumentCard(
-    item: DocumentItem,
-    onFavorite: (String) -> Unit,
-    onOpen: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+private fun DocumentCard(item: DocumentItem, onFavorite: (String) -> Unit, onOpen: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(item.type.label, style = MaterialTheme.typography.labelMedium)
-                Text(
-                    item.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            TextButton(onClick = { onFavorite(item.id) }) {
-                Text(if (item.isFavorite) "★" else "☆")
-            }
+            TextButton(onClick = { onFavorite(item.id) }) { Text(if (item.isFavorite) "★" else "☆") }
         }
     }
 }
