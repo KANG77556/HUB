@@ -32,6 +32,13 @@ fun main() {
     assertEquals("application/zip", DocumentMimeResolver.resolve("archive.zip", "application/zip"), "provider mime preferred")
     assertEquals("*/*", DocumentMimeResolver.resolve("unknown.zzz", null), "unknown mime fallback")
 
+    assertEquals(ViewerKind.PDF, DocumentViewerStrategy.resolve("report.pdf", null), "pdf viewer")
+    assertEquals(ViewerKind.IMAGE, DocumentViewerStrategy.resolve("scan.png", null), "image viewer")
+    assertEquals(ViewerKind.TEXT, DocumentViewerStrategy.resolve("memo.txt", null), "text viewer")
+    assertEquals(ViewerKind.TEXT, DocumentViewerStrategy.resolve("data.csv", null), "csv viewer")
+    assertEquals(ViewerKind.UNSUPPORTED, DocumentViewerStrategy.resolve("lesson.docx", null), "docx fallback")
+    assertEquals(ViewerKind.UNSUPPORTED, DocumentViewerStrategy.resolve("공문.hwp", null), "hwp fallback")
+
     val items = listOf(
         DocumentItem("1", "2026 예산.xlsx", "content://1", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", DocumentType.EXCEL, 10L, false),
         DocumentItem("2", "회의 보고서.pdf", "content://2", "application/pdf", DocumentType.PDF, 20L, true),
