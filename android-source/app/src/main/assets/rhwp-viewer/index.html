@@ -5,7 +5,95 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
   <title>HWP Viewer</title>
   <style>
-    html, body { margin:0; padding:0; background:#e9eaec; font-family:sans-serif; }
-    #status { padding:16px; text-align:center; }
-    #viewer { padding:12px; }
-    .page { margin
+    html, body { margin: 0; padding: 0; background: #e9eaec; font-family: sans-serif; }
+    #status { padding: 16px; text-align: center; }
+    #viewer { padding: 12px; }
+    .page { margin: 0 auto 14px; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.18); overflow: hidden; }
+    .page svg { display: block; width: 100%; height: auto; }
+    .error { color: #b00020; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div id="status">한글 문서 뷰어를 준비하고 있습니다.</div>
+  <main id="viewer"></main>
+
+  <script type="module">
+    import init, { HwpDocument } from './rhwp.js';
+
+    const status = document.getElementById('status');
+    const viewer = document.getElementById('viewer');
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    let runtimeReady;
+    let activeDocument = null;
+
+    globalThis.measureTextWidth = (font, text) => {
+      if (!context) return 0;
+      context.font = font || '10px sans-serif';
+      return context.measureText(text ?? '').width;
+    };
+
+    function base64ToBytes(base64) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    }
+
+    async function ensureRuntime() {
+      if (!runtimeReady) {
+        runtimeReady = init({ module_or_path: './rhwp_bg.wasm' });
+      }
+      await runtimeReady;
+    }
+
+    function disposeActiveDocument() {
+      if (activeDocument && typeof activeDocument.free === 'function') {
+        activeDocument.free();
+      }
+      activeDocument = null;
+    }
+
+    async function renderDocument(base64) {
+      status.className = '';
+      status.textContent = '문서를 불러오는 중입니다.';
+      viewer.replaceChildren();
+
+      try {
+        await ensureRuntime();
+        disposeActiveDocument();
+
+        const bytes = base64ToBytes(base64);
+        const documentObject = new HwpDocument(bytes);
+        activeDocument = documentObject;
+        const pageCount = documentObject.pageCount();
+
+        if (!Number.isFinite(pageCount) || pageCount < 1) {
+          throw new Error('표시할 페이지를 찾을 수 없습니다.');
+        }
+
+        for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+          const page = document.createElement('section');
+          page.className = 'page';
+          page.setAttribute('aria-label', `${pageIndex + 1}페이지`);
+          page.innerHTML = documentObject.renderPageSvg(pageIndex);
+          viewer.appendChild(page);
+        }
+
+        status.textContent = `${pageCount}페이지`;
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = `HWP/HWPX 문서를 표시할 수 없습니다.\n${error?.message || error}`;
+        viewer.replaceChildren();
+      }
+    }
+
+    window.openRhwpFromBase64 = (base64) => {
+      renderDocument(base64);
+    };
+
+    window.addEventListener('beforeunload', disposeActiveDocument);
+    status.textContent = '문서를 선택하면 원본 레이아웃으로 표시합니다.';
+  </script>
+</body>
+</html>
