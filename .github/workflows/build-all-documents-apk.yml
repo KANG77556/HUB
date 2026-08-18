@@ -37,6 +37,18 @@ jobs:
             rm -rf all-documents-android
             cp -a android-source all-documents-android
           fi
+      - name: Publish expanded source early
+        run: |
+          if [ ! -d android-source/app ]; then
+            rm -rf android-source
+            cp -a all-documents-android android-source
+            rm -rf android-source/.gradle android-source/app/build android-source/build
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add android-source
+            git commit -m "build: publish expanded Android source [skip ci]"
+            git push
+          fi
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -59,21 +71,16 @@ jobs:
           path: all-documents-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Publish maintained source and APK
+      - name: Publish latest APK
         run: |
-          if [ ! -d android-source/app ]; then
-            rm -rf android-source
-            cp -a all-documents-android android-source
-            rm -rf android-source/.gradle android-source/app/build android-source/build
-          fi
           mkdir -p downloads
           cp all-documents-android/app/build/outputs/apk/debug/app-debug.apk downloads/all-documents-debug.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add android-source downloads/all-documents-debug.apk
+          git add downloads/all-documents-debug.apk
           if git diff --cached --quiet; then
-            echo "Source and APK unchanged; nothing to commit."
+            echo "APK unchanged; nothing to commit."
           else
-            git commit -m "build: publish maintained Android source and APK [skip ci]"
+            git commit -m "build: publish latest all documents APK [skip ci]"
             git push
           fi
