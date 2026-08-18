@@ -4,6 +4,9 @@ enum class ViewerKind { PDF, IMAGE, TEXT, RHWP, UNSUPPORTED }
 
 object DocumentViewerStrategy {
     fun resolve(name: String, mimeType: String?): ViewerKind {
+        val extension = name.substringAfterLast('.', "").lowercase()
+        if (extension == "hwp" || extension == "hwpx") return ViewerKind.RHWP
+
         val mime = DocumentMimeResolver.resolve(name, mimeType).lowercase()
         return when {
             mime == "application/pdf" -> ViewerKind.PDF
