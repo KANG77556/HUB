@@ -8,6 +8,9 @@ on:
       - '.github/workflows/build-all-documents-apk.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: all-documents-apk-${{ github.ref }}
   cancel-in-progress: true
@@ -41,10 +44,23 @@ jobs:
           test -s all-documents-android/app/build/outputs/apk/debug/app-debug.apk
           unzip -t all-documents-android/app/build/outputs/apk/debug/app-debug.apk >/dev/null
           sha256sum all-documents-android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: all-documents-debug-apk
           path: all-documents-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Publish APK to stable repository path
+        run: |
+          mkdir -p downloads
+          cp all-documents-android/app/build/outputs/apk/debug/app-debug.apk downloads/all-documents-debug.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/all-documents-debug.apk
+          if git diff --cached --quiet; then
+            echo "APK unchanged; nothing to commit."
+          else
+            git commit -m "build: publish latest all documents APK [skip ci]"
+            git push
+          fi
