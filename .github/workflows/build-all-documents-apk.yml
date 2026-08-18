@@ -37,23 +37,11 @@ jobs:
             rm -rf all-documents-android
             cp -a android-source all-documents-android
           fi
-      - name: Publish expanded source early
-        run: |
-          if [ ! -d android-source/app ]; then
-            rm -rf android-source
-            cp -a all-documents-android android-source
-            rm -rf android-source/.gradle android-source/app/build android-source/build
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add android-source
-            git commit -m "build: publish expanded Android source [skip ci]"
-            git push
-          fi
       - name: Vendor rhwp browser runtime
         run: |
           set -euo pipefail
           TMP_DIR="$(mktemp -d)"
-          npm pack @rhwp/core@0.8.2 --pack-destination "$TMP_DIR"
+          npm pack @rhwp/core@0.8.4 --pack-destination "$TMP_DIR"
           PKG="$(find "$TMP_DIR" -maxdepth 1 -name '*.tgz' -print -quit)"
           test -n "$PKG"
           tar -xzf "$PKG" -C "$TMP_DIR"
@@ -65,6 +53,7 @@ jobs:
           mkdir -p "$DEST"
           cp "$JS" "$DEST/rhwp.js"
           cp "$WASM" "$DEST/rhwp_bg.wasm"
+          test -s "$DEST/index.html"
           test -s "$DEST/rhwp.js"
           test -s "$DEST/rhwp_bg.wasm"
       - name: Set up Gradle
@@ -83,6 +72,7 @@ jobs:
           APK=all-documents-android/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -t "$APK" >/dev/null
+          unzip -l "$APK" | grep -q 'assets/rhwp-viewer/index.html'
           unzip -l "$APK" | grep -q 'assets/rhwp-viewer/rhwp.js'
           unzip -l "$APK" | grep -q 'assets/rhwp-viewer/rhwp_bg.wasm'
           sha256sum "$APK"
