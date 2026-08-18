@@ -6,6 +6,7 @@ on:
     paths:
       - 'all-documents-android.tar.gz.b64'
       - '.github/workflows/build-all-documents-apk.yml'
+      - 'android-source/**'
   workflow_dispatch:
 
 permissions:
@@ -26,9 +27,16 @@ jobs:
           java-version: '17'
       - name: Restore source
         run: |
+          rm -rf all-documents-android
           mkdir -p all-documents-android
           base64 -d all-documents-android.tar.gz.b64 > /tmp/app.tar.gz
           tar -xzf /tmp/app.tar.gz -C all-documents-android
+      - name: Prefer maintained expanded source
+        run: |
+          if [ -d android-source/app ]; then
+            rm -rf all-documents-android
+            cp -a android-source all-documents-android
+          fi
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -51,16 +59,21 @@ jobs:
           path: all-documents-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Publish APK to stable repository path
+      - name: Publish maintained source and APK
         run: |
+          if [ ! -d android-source/app ]; then
+            rm -rf android-source
+            cp -a all-documents-android android-source
+            rm -rf android-source/.gradle android-source/app/build android-source/build
+          fi
           mkdir -p downloads
           cp all-documents-android/app/build/outputs/apk/debug/app-debug.apk downloads/all-documents-debug.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads/all-documents-debug.apk
+          git add android-source downloads/all-documents-debug.apk
           if git diff --cached --quiet; then
-            echo "APK unchanged; nothing to commit."
+            echo "Source and APK unchanged; nothing to commit."
           else
-            git commit -m "build: publish latest all documents APK [skip ci]"
+            git commit -m "build: publish maintained Android source and APK [skip ci]"
             git push
           fi
