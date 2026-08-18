@@ -83,16 +83,33 @@ jobs:
           path: all-documents-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Publish latest APK
+      - name: Publish latest APK and verification report
         run: |
+          set -euo pipefail
           mkdir -p downloads
-          cp all-documents-android/app/build/outputs/apk/debug/app-debug.apk downloads/all-documents-debug.apk
+          APK=all-documents-android/app/build/outputs/apk/debug/app-debug.apk
+          cp "$APK" downloads/all-documents-debug.apk
+          APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          APK_SIZE="$(stat -c%s "$APK")"
+          cat > downloads/build-verification.txt <<EOF
+          status=PASS
+          source_commit=${GITHUB_SHA}
+          workflow_run=${GITHUB_RUN_ID}
+          apk_sha256=${APK_SHA256}
+          apk_size=${APK_SIZE}
+          rhwp_index=PASS
+          rhwp_js=PASS
+          rhwp_wasm=PASS
+          domain_tests=PASS
+          assemble_debug=PASS
+          zip_integrity=PASS
+          EOF
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads/all-documents-debug.apk
+          git add downloads/all-documents-debug.apk downloads/build-verification.txt
           if git diff --cached --quiet; then
-            echo "APK unchanged; nothing to commit."
+            echo "APK and report unchanged; nothing to commit."
           else
-            git commit -m "build: publish latest all documents APK [skip ci]"
+            git commit -m "build: publish verified all documents APK [skip ci]"
             git push
           fi
