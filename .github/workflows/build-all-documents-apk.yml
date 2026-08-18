@@ -49,6 +49,24 @@ jobs:
             git commit -m "build: publish expanded Android source [skip ci]"
             git push
           fi
+      - name: Vendor rhwp browser runtime
+        run: |
+          set -euo pipefail
+          TMP_DIR="$(mktemp -d)"
+          npm pack @rhwp/core@0.8.2 --pack-destination "$TMP_DIR"
+          PKG="$(find "$TMP_DIR" -maxdepth 1 -name '*.tgz' -print -quit)"
+          test -n "$PKG"
+          tar -xzf "$PKG" -C "$TMP_DIR"
+          JS="$(find "$TMP_DIR/package" -type f -name 'rhwp.js' -print -quit)"
+          WASM="$(find "$TMP_DIR/package" -type f -name 'rhwp_bg.wasm' -print -quit)"
+          test -s "$JS"
+          test -s "$WASM"
+          DEST="all-documents-android/app/src/main/assets/rhwp-viewer"
+          mkdir -p "$DEST"
+          cp "$JS" "$DEST/rhwp.js"
+          cp "$WASM" "$DEST/rhwp_bg.wasm"
+          test -s "$DEST/rhwp.js"
+          test -s "$DEST/rhwp_bg.wasm"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -59,11 +77,15 @@ jobs:
       - name: Build debug APK
         working-directory: all-documents-android
         run: gradle --no-daemon assembleDebug
-      - name: Verify APK
+      - name: Verify APK and rhwp runtime
         run: |
-          test -s all-documents-android/app/build/outputs/apk/debug/app-debug.apk
-          unzip -t all-documents-android/app/build/outputs/apk/debug/app-debug.apk >/dev/null
-          sha256sum all-documents-android/app/build/outputs/apk/debug/app-debug.apk
+          set -euo pipefail
+          APK=all-documents-android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          unzip -l "$APK" | grep -q 'assets/rhwp-viewer/rhwp.js'
+          unzip -l "$APK" | grep -q 'assets/rhwp-viewer/rhwp_bg.wasm'
+          sha256sum "$APK"
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
