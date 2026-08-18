@@ -8,6 +8,8 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.util.Base64
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.Image
@@ -36,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebViewAssetLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kr.co.alldocuments.domain.DocumentItem
@@ -95,21 +98,35 @@ private fun RhwpWebView(base64: String) {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
+            val assetLoader = WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+                .build()
             WebView(context).apply {
                 settings.javaScriptEnabled = true
-                settings.allowFileAccess = true
+                settings.allowFileAccess = false
                 settings.allowContentAccess = false
                 webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                        assetLoader.shouldInterceptRequest(request.url)
+
                     override fun onPageFinished(view: WebView, url: String) {
-                        view.evaluateJavascript("window.openRhwpFromBase64(${jsString(base64)})", null)
+                        val command = "window.openRhwpFromBase64(${jsString(base64)})"
+                        fun send(attempt: Int) {
+                            view.evaluateJavascript("typeof window.openRhwpFromBase64 === 'function'") { ready ->
+                                if (ready == "true") view.evaluateJavascript(command, null)
+                                else if (attempt < 40) view.postDelayed({ send(attempt + 1) }, 100)
+                            }
+                        }
+                        setTimeout(send = { send(0) })
                     }
                 }
-                loadUrl("file:///android_asset/rhwp-viewer/index.html")
+                loadUrl("https://appassets.androidplatform.net/assets/rhwp-viewer/index.html")
             }
         }
     )
 }
 
+private fun WebView.setTimeout(send: () -> Unit) { post(send) }
 private fun jsString(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 private fun loadDocument(resolver: android.content.ContentResolver, uri: Uri, kind: ViewerKind): ViewerState = when (kind) {
