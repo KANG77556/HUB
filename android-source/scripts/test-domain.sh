@@ -6,6 +6,7 @@ kotlinc \
   "$ROOT/app/src/main/java/kr/co/alldocuments/domain/DocumentModels.kt" \
   "$ROOT/app/src/main/java/kr/co/alldocuments/domain/DocumentClassifier.kt" \
   "$ROOT/app/src/main/java/kr/co/alldocuments/domain/DocumentMimeResolver.kt" \
+  "$ROOT/app/src/main/java/kr/co/alldocuments/domain/DocumentViewerStrategy.kt" \
   "$ROOT/domain-tests/DomainTest.kt" \
   -include-runtime -d "$OUT"
 java -jar "$OUT"
