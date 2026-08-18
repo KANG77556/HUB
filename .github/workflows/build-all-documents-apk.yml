@@ -2,7 +2,7 @@ name: Build All Documents APK
 
 on:
   push:
-    branches: [build/all-documents-android]
+    branches: [main, build/all-documents-android]
     paths:
       - 'all-documents-android.tar.gz.b64'
       - '.github/workflows/build-all-documents-apk.yml'
