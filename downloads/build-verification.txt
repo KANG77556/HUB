@@ -1,0 +1,11 @@
+status=PASS
+source_commit=1d75b569a0e3260fbca193181883501f6549c361
+workflow_run=32197203943
+apk_sha256=630fc59df8af2f331b171b823ba05a6bd7ebe9dc360b0a0d63a945893db2c430
+apk_size=12929653
+rhwp_index=PASS
+rhwp_js=PASS
+rhwp_wasm=PASS
+domain_tests=PASS
+assemble_debug=PASS
+zip_integrity=PASS
