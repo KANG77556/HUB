@@ -1,0 +1,51 @@
+name: Build All Documents APK
+
+on:
+  push:
+    branches: [build/all-documents-android]
+    paths:
+      - 'all-documents-android.tar.gz.b64'
+      - '.github/workflows/build-all-documents-apk.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: all-documents-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Restore source
+        run: |
+          mkdir -p all-documents-android
+          base64 -d all-documents-android.tar.gz.b64 > /tmp/app.tar.gz
+          tar -xzf /tmp/app.tar.gz -C all-documents-android
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Test domain
+        working-directory: all-documents-android
+        run: bash scripts/test-domain.sh
+      - name: Build debug APK
+        working-directory: all-documents-android
+        run: gradle --no-daemon assembleDebug
+      - name: Verify APK
+        run: |
+          test -s all-documents-android/app/build/outputs/apk/debug/app-debug.apk
+          unzip -t all-documents-android/app/build/outputs/apk/debug/app-debug.apk >/dev/null
+          sha256sum all-documents-android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-documents-debug-apk
+          path: all-documents-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
