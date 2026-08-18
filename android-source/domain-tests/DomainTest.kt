@@ -20,6 +20,8 @@ fun main() {
     assertEquals(ViewerKind.RHWP, DocumentViewerStrategy.resolve("계획서.hwpx", null), "hwpx rhwp viewer")
     assertEquals(ViewerKind.RHWP, DocumentViewerStrategy.resolve("provider.bin", "application/x-hwp"), "hwp provider mime viewer")
     assertEquals(ViewerKind.RHWP, DocumentViewerStrategy.resolve("provider.bin", "application/vnd.hancom.hwpx"), "hwpx provider mime viewer")
+    assertEquals(ViewerKind.RHWP, DocumentViewerStrategy.resolve("경상남도교육청 계획서.HWPX", "application/octet-stream"), "hwpx extension overrides generic provider mime")
+    assertEquals(ViewerKind.RHWP, DocumentViewerStrategy.resolve("공문.HWP", "application/octet-stream"), "hwp extension overrides generic provider mime")
     val items = listOf(
         DocumentItem("1", "2026 예산.xlsx", "content://1", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", DocumentType.EXCEL, 10L, false),
         DocumentItem("2", "회의 보고서.pdf", "content://2", "application/pdf", DocumentType.PDF, 20L, true),
