@@ -6,95 +6,38 @@
   <title>HWP Viewer</title>
   <style>
     html, body { margin: 0; padding: 0; background: #e9eaec; font-family: sans-serif; }
-    #status { padding: 16px; text-align: center; }
-    #viewer { padding: 12px; }
-    .page { margin: 0 auto 14px; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.18); overflow: hidden; }
-    .page svg { display: block; width: 100%; height: auto; }
+    #status { padding: 10px; text-align: center; }
+    #viewer { padding: 12px; overflow: visible; }
+    .page { margin: 0 auto 14px; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.18); overflow: visible; max-width: 100%; }
+    .page svg { display: block; max-width: 100%; width: 100%; height: auto; overflow: visible; }
     .error { color: #b00020; white-space: pre-wrap; }
   </style>
 </head>
 <body>
   <div id="status">한글 문서 뷰어를 준비하고 있습니다.</div>
   <main id="viewer"></main>
-
-  <script>
-    const statusNode = document.getElementById('status');
-    function showStartupError(prefix, detail) {
-      statusNode.className = 'error';
-      statusNode.textContent = `${prefix}\n${detail || '알 수 없는 오류'}`;
-    }
-    window.addEventListener('error', event => {
-      showStartupError('RHWP JavaScript 오류', event.message || event.error?.message);
-    });
-    window.addEventListener('unhandledrejection', event => {
-      const reason = event.reason;
-      showStartupError('RHWP Promise 오류', reason?.message || String(reason));
-    });
-  </script>
-
-  <script type="module">
-    import init, { HwpDocument } from './rhwp.js';
-
-    const status = document.getElementById('status');
-    const viewer = document.getElementById('viewer');
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    let runtimeReady;
-    let activeDocument = null;
-
-    globalThis.measureTextWidth = (font, text) => {
-      if (!context) return 0;
-      context.font = font || '10px sans-serif';
-      return context.measureText(text ?? '').width;
-    };
-
-    function base64ToBytes(base64) {
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-      return bytes;
-    }
-
-    async function ensureRuntime() {
-      if (!runtimeReady) runtimeReady = init({ module_or_path: './rhwp_bg.wasm' });
-      await runtimeReady;
-    }
-
-    function disposeActiveDocument() {
-      if (activeDocument && typeof activeDocument.free === 'function') activeDocument.free();
-      activeDocument = null;
-    }
-
-    async function renderDocument(base64) {
-      status.className = '';
-      status.textContent = '문서를 불러오는 중입니다.';
-      viewer.replaceChildren();
-      try {
-        await ensureRuntime();
-        disposeActiveDocument();
-        const bytes = base64ToBytes(base64);
-        const documentObject = new HwpDocument(bytes);
-        activeDocument = documentObject;
-        const pageCount = documentObject.pageCount();
-        if (!Number.isFinite(pageCount) || pageCount < 1) throw new Error('표시할 페이지를 찾을 수 없습니다.');
-        for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-          const page = document.createElement('section');
-          page.className = 'page';
-          page.setAttribute('aria-label', `${pageIndex + 1}페이지`);
-          page.innerHTML = documentObject.renderPageSvg(pageIndex);
-          viewer.appendChild(page);
-        }
-        status.textContent = `${pageCount}페이지`;
-      } catch (error) {
-        status.className = 'error';
-        status.textContent = `HWP/HWPX 문서를 표시할 수 없습니다.\n${error?.message || error}`;
-        viewer.replaceChildren();
-      }
-    }
-
-    window.openRhwpFromBase64 = base64 => { renderDocument(base64); };
-    window.addEventListener('beforeunload', disposeActiveDocument);
-    status.textContent = '문서를 선택하면 원본 레이아웃으로 표시합니다.';
-  </script>
+<script>
+const statusNode=document.getElementById('status');
+function showStartupError(prefix,detail){statusNode.className='error';statusNode.textContent=`${prefix}\n${detail||'알 수 없는 오류'}`;}
+window.addEventListener('error',event=>showStartupError('RHWP JavaScript 오류',event.message||event.error?.message));
+window.addEventListener('unhandledrejection',event=>{const reason=event.reason;showStartupError('RHWP Promise 오류',reason?.message||String(reason));});
+</script>
+<script type="module">
+import init,{HwpDocument} from './rhwp.js';
+const status=document.getElementById('status'); const viewer=document.getElementById('viewer');
+const canvas=document.createElement('canvas'); const context=canvas.getContext('2d'); let runtimeReady; let activeDocument=null;
+globalThis.measureTextWidth=(font,text)=>{if(!context)return 0;context.font=font||'10px sans-serif';return context.measureText(text??'').width;};
+function base64ToBytes(base64){const binary=atob(base64);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i+=1)bytes[i]=binary.charCodeAt(i);return bytes;}
+async function ensureRuntime(){if(!runtimeReady)runtimeReady=init({module_or_path:'./rhwp_bg.wasm'});await runtimeReady;}
+function disposeActiveDocument(){if(activeDocument&&typeof activeDocument.free==='function')activeDocument.free();activeDocument=null;}
+function normalizeSvg(svg){
+  const width=parseFloat(svg.getAttribute('width')||'0'); const height=parseFloat(svg.getAttribute('height')||'0');
+  if(!svg.hasAttribute('viewBox')&&width>0&&height>0) svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  svg.style.width='100%'; svg.style.maxWidth='100%'; svg.style.height='auto'; svg.style.overflow='visible';
+}
+async function renderDocument(base64){status.className='';status.textContent='문서를 불러오는 중입니다.';viewer.replaceChildren();try{await ensureRuntime();disposeActiveDocument();const bytes=base64ToBytes(base64);const documentObject=new HwpDocument(bytes);activeDocument=documentObject;const pageCount=documentObject.pageCount();if(!Number.isFinite(pageCount)||pageCount<1)throw new Error('표시할 페이지를 찾을 수 없습니다.');for(let pageIndex=0;pageIndex<pageCount;pageIndex+=1){const page=document.createElement('section');page.className='page';page.setAttribute('aria-label',`${pageIndex+1}페이지`);page.innerHTML=documentObject.renderPageSvg(pageIndex);const svg=page.querySelector('svg');if(svg)normalizeSvg(svg);viewer.appendChild(page);}status.textContent=`${pageCount}페이지`;}catch(error){status.className='error';status.textContent=`HWP/HWPX 문서를 표시할 수 없습니다.\n${error?.message||error}`;viewer.replaceChildren();}}
+window.openRhwpFromBase64=base64=>{renderDocument(base64);};window.addEventListener('beforeunload',disposeActiveDocument);status.textContent='문서를 선택하면 원본 레이아웃으로 표시합니다.';
+</script>
 </body>
 </html>
