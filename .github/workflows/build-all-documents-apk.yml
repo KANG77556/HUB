@@ -28,10 +28,12 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+      - name: Verify local Java
+        run: |
+          $ErrorActionPreference = 'Stop'
+          java -version
+          $version = (& java -version 2>&1 | Select-Object -First 1 | Out-String)
+          if ($version -notmatch '17') { throw "Java 17 is required. Found: $version" }
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
