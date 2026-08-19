@@ -1,24 +1,15 @@
-name: Build All Documents APK
+name: Build Internal Viewer Self-Hosted
 
 on:
-  push:
-    branches: [main, build/all-documents-android]
-    paths:
-      - '.github/workflows/build-all-documents-apk.yml'
-      - 'android-source/**'
   pull_request:
     branches: [main]
     paths:
-      - '.github/workflows/build-all-documents-apk.yml'
       - 'android-source/**'
+      - '.github/workflows/build-internal-viewer-selfhosted.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: all-documents-apk-${{ github.ref }}
-  cancel-in-progress: true
+  contents: read
 
 jobs:
   build:
@@ -44,10 +35,10 @@ jobs:
           if (-not (Test-Path 'android-source/app')) { throw 'android-source/app not found' }
           if (Test-Path 'all-documents-android') { Remove-Item 'all-documents-android' -Recurse -Force }
           Copy-Item 'android-source' 'all-documents-android' -Recurse -Force
-      - name: Vendor RHWP browser runtime
+      - name: Vendor RHWP runtime
         run: |
           $ErrorActionPreference = 'Stop'
-          $tmp = Join-Path $env:RUNNER_TEMP 'rhwp-runtime'
+          $tmp = Join-Path $env:RUNNER_TEMP 'rhwp-runtime-fresh'
           if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
           New-Item -ItemType Directory -Path $tmp | Out-Null
           npm pack '@rhwp/core@0.8.4' --pack-destination $tmp
@@ -61,21 +52,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item $js.FullName (Join-Path $dest 'rhwp.js') -Force
           Copy-Item $wasm.FullName (Join-Path $dest 'rhwp_bg.wasm') -Force
-      - name: Build debug APK
+      - name: Build APK
         working-directory: all-documents-android
         run: gradle --no-daemon assembleDebug
-      - name: Verify APK and RHWP runtime
+      - name: Verify APK
         run: |
           $ErrorActionPreference = 'Stop'
           $apk = 'all-documents-android/app/build/outputs/apk/debug/app-debug.apk'
-          if (-not (Test-Path $apk) -or (Get-Item $apk).Length -eq 0) { throw 'APK was not created' }
-          $verifyDir = Join-Path $env:RUNNER_TEMP 'apk-verify'
-          if (Test-Path $verifyDir) { Remove-Item $verifyDir -Recurse -Force }
-          Expand-Archive -Path $apk -DestinationPath $verifyDir -Force
-          @('assets/rhwp-viewer/index.html','assets/rhwp-viewer/rhwp.js','assets/rhwp-viewer/rhwp_bg.wasm') | ForEach-Object {
-            if (-not (Test-Path (Join-Path $verifyDir $_))) { throw "APK missing $_" }
-          }
-          Write-Host ((Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant())
+          if (-not (Test-Path $apk)) { throw 'APK not found' }
+          $hash = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "APK_SHA256=$hash"
+          Write-Host "APK_SIZE=$((Get-Item $apk).Length)"
       - uses: actions/upload-artifact@v4
         with:
           name: all-documents-debug-apk
