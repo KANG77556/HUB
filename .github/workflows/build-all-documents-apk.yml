@@ -28,7 +28,37 @@ jobs:
         shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
     steps:
       - uses: actions/checkout@v4
-      - name: Verify local Java
+      - name: Detect local Java 17
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $roots = @(
+            'C:\Program Files\Android\Android Studio\jbr',
+            'C:\Program Files\Eclipse Adoptium',
+            'C:\Program Files\Java',
+            'C:\Program Files\Microsoft',
+            'C:\Program Files\Zulu',
+            'C:\Program Files\BellSoft'
+          )
+          $candidates = @()
+          foreach ($root in $roots) {
+            if (Test-Path $root) {
+              if (Test-Path (Join-Path $root 'bin\java.exe')) { $candidates += $root }
+              $candidates += Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+            }
+          }
+          $javaHome = $null
+          foreach ($candidate in $candidates | Select-Object -Unique) {
+            $java = Join-Path $candidate 'bin\java.exe'
+            if (-not (Test-Path $java)) { continue }
+            $version = (& $java -version 2>&1 | Select-Object -First 1 | Out-String)
+            Write-Host "JAVA_CANDIDATE=$candidate :: $version"
+            if ($version -match '17') { $javaHome = $candidate; break }
+          }
+          if (-not $javaHome) { throw 'Java 17 was not found on this runner.' }
+          "JAVA_HOME=$javaHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          (Join-Path $javaHome 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "JAVA_HOME=$javaHome"
+      - name: Verify Java
         run: |
           $ErrorActionPreference = 'Stop'
           java -version
