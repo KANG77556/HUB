@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,6 +42,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,6 +54,8 @@ import kotlinx.coroutines.withContext
 import kr.co.alldocuments.domain.DocumentItem
 import kr.co.alldocuments.domain.DocumentViewerStrategy
 import kr.co.alldocuments.domain.ViewerKind
+
+private const val VIEWER_TOP_BAR_HEIGHT_DP = 52
 
 private sealed interface ViewerState {
     data object Loading : ViewerState
@@ -74,40 +80,77 @@ fun DocumentViewer(item: DocumentItem, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Color(0xFFF3F4F6))) {
-        Surface(shadowElevation = 2.dp) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
-                Text(
-                    item.name,
-                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Column(Modifier.fillMaxSize().background(Color(0xFFEDEFF2))) {
+        ViewerTopBar(fileName = item.name, onBack = onBack)
+        HorizontalDivider(color = Color(0xFFE5E7EB), thickness = 1.dp)
+        Box(
+            Modifier.fillMaxSize().background(Color(0xFFEDEFF2)),
+            contentAlignment = Alignment.Center
+        ) {
             when (val current = state) {
                 ViewerState.Loading -> CircularProgressIndicator()
                 is ViewerState.Error -> Text(current.message, Modifier.padding(20.dp))
-                is ViewerState.TextContent -> LazyColumn(Modifier.fillMaxSize().background(Color.White).padding(18.dp)) { item { Text(current.text) } }
-                is ViewerState.ImageContent -> Image(current.bitmap.asImageBitmap(), item.name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                is ViewerState.TextContent -> LazyColumn(
+                    Modifier.fillMaxSize().background(Color.White).padding(horizontal = 18.dp, vertical = 14.dp)
+                ) { item { Text(current.text) } }
+                is ViewerState.ImageContent -> Image(
+                    current.bitmap.asImageBitmap(),
+                    item.name,
+                    Modifier.fillMaxSize().padding(4.dp),
+                    contentScale = ContentScale.Fit
+                )
                 is ViewerState.Rhwp -> RhwpWebView(current.base64)
                 is ViewerState.Office -> InternalOfficePreview(current.preview)
-                is ViewerState.Pdf -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                is ViewerState.Pdf -> LazyColumn(
+                    Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     itemsIndexed(current.pages) { index, bitmap ->
                         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("${index + 1} / ${current.pages.size}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(4.dp))
-                            Image(bitmap.asImageBitmap(), "${index + 1}페이지", Modifier.fillMaxWidth().background(Color.White), contentScale = ContentScale.Fit)
+                            Text(
+                                "${index + 1} / ${current.pages.size}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF6B7280),
+                                modifier = Modifier.padding(vertical = 3.dp)
+                            )
+                            Image(
+                                bitmap.asImageBitmap(),
+                                "${index + 1}페이지",
+                                Modifier.fillMaxWidth().background(Color.White),
+                                contentScale = ContentScale.Fit
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ViewerTopBar(fileName: String, onBack: () -> Unit) {
+    Surface(color = Color(0xFFF9FAFB), shadowElevation = 0.dp) {
+        Row(
+            Modifier.fillMaxWidth().height(VIEWER_TOP_BAR_HEIGHT_DP.dp).padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                Text(
+                    "‹",
+                    modifier = Modifier.semantics { contentDescription = "뒤로" },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color(0xFF374151)
+                )
+            }
+            Text(
+                fileName,
+                modifier = Modifier.weight(1f).padding(start = 2.dp, end = 12.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF111827)
+            )
         }
     }
 }
