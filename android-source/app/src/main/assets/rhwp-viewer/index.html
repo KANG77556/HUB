@@ -1,7 +1,141 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes"><title>문서</title><style>
-html,body{margin:0;padding:0;background:#f3f4f6;font-family:sans-serif}#status{font-size:12px;padding:6px;text-align:center;color:#6b7280}#status.ready{display:none}#viewer{padding:6px;overflow:visible}.page{margin:0 auto 8px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.16);overflow:visible;max-width:100%}.page svg{display:block;width:100%;max-width:100%;height:auto;overflow:visible}.error{display:block!important;color:#b00020;white-space:pre-wrap;padding:12px!important}
-</style></head><body><div id="status">문서를 준비하고 있습니다.</div><main id="viewer"></main><script>
-const statusNode=document.getElementById('status');function showStartupError(prefix,detail){statusNode.className='error';statusNode.textContent=`${prefix}\n${detail||'알 수 없는 오류'}`;}window.addEventListener('error',e=>showStartupError('문서 표시 오류',e.message||e.error?.message));window.addEventListener('unhandledrejection',e=>showStartupError('문서 처리 오류',e.reason?.message||String(e.reason)));
-</script><script type="module">
-import init,{HwpDocument} from './rhwp.js';const status=document.getElementById('status'),viewer=document.getElementById('viewer'),canvas=document.createElement('canvas'),context=canvas.getContext('2d');let runtimeReady,activeDocument=null;globalThis.measureTextWidth=(font,text)=>{if(!context)return 0;context.font=font||'10px sans-serif';return context.measureText(text??'').width;};function base64ToBytes(base64){const binary=atob(base64),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);return bytes}async function ensureRuntime(){if(!runtimeReady)runtimeReady=init({module_or_path:'./rhwp_bg.wasm'});await runtimeReady}function dispose(){if(activeDocument&&typeof activeDocument.free==='function')activeDocument.free();activeDocument=null}function normalizeSvg(svg){const w=parseFloat(svg.getAttribute('width')||'0'),h=parseFloat(svg.getAttribute('height')||'0');if(!svg.hasAttribute('viewBox')&&w>0&&h>0)svg.setAttribute('viewBox',`0 0 ${w} ${h}`);svg.setAttribute('preserveAspectRatio','xMidYMid meet');svg.style.width='100%';svg.style.maxWidth='100%';svg.style.height='auto';svg.style.overflow='visible'}async function renderDocument(base64){status.className='';status.textContent='문서를 불러오는 중입니다.';viewer.replaceChildren();try{await ensureRuntime();dispose();activeDocument=new HwpDocument(base64ToBytes(base64));const count=activeDocument.pageCount();if(!Number.isFinite(count)||count<1)throw new Error('표시할 페이지가 없습니다.');for(let i=0;i<count;i++){const page=document.createElement('section');page.className='page';page.innerHTML=activeDocument.renderPageSvg(i);const svg=page.querySelector('svg');if(svg)normalizeSvg(svg);viewer.appendChild(page)}status.textContent='';status.className='ready'}catch(error){status.className='error';status.textContent=`HWP/HWPX 문서를 표시할 수 없습니다.\n${error?.message||error}`;viewer.replaceChildren()}}window.openRhwpFromBase64=renderDocument;window.addEventListener('beforeunload',dispose);status.textContent='문서를 기다리고 있습니다.';
-</script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=6,user-scalable=yes">
+<title>문서</title>
+<style>
+:root{--bg:#e9eaed;--paper:#fff;--gap:10px;--pad:6px}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);font-family:"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;-webkit-text-size-adjust:100%}
+#status{font-size:12px;padding:6px;text-align:center;color:#6b7280}
+#status.ready{display:none}
+#viewer{width:100%;padding:var(--pad);overflow-x:hidden}
+.page-shell{width:100%;margin:0 auto var(--gap);display:flex;justify-content:center;align-items:flex-start}
+.page{position:relative;width:100%;max-width:100%;background:var(--paper);box-shadow:0 1px 4px rgba(0,0,0,.16);overflow:hidden}
+.page svg{display:block;width:100%;max-width:100%;height:auto;overflow:visible;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
+.page svg text,.page svg tspan{font-family:"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif!important}
+.error{display:block!important;color:#b00020;white-space:pre-wrap;padding:12px!important}
+</style>
+</head>
+<body>
+<div id="status">문서를 준비하고 있습니다.</div>
+<main id="viewer"></main>
+<script>
+const statusNode=document.getElementById('status');
+function showStartupError(prefix,detail){statusNode.className='error';statusNode.textContent=`${prefix}\n${detail||'알 수 없는 오류'}`;}
+window.addEventListener('error',e=>showStartupError('문서 표시 오류',e.message||e.error?.message));
+window.addEventListener('unhandledrejection',e=>showStartupError('문서 처리 오류',e.reason?.message||String(e.reason)));
+</script>
+<script type="module">
+import init,{HwpDocument} from './rhwp.js';
+const status=document.getElementById('status');
+const viewer=document.getElementById('viewer');
+const canvas=document.createElement('canvas');
+const context=canvas.getContext('2d');
+const SYSTEM_FONT='"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+let runtimeReady,activeDocument=null;
+
+function normalizeCanvasFont(font){
+  if(!font)return `10px ${SYSTEM_FONT}`;
+  const size=String(font).match(/(?:^|\s)(\d+(?:\.\d+)?(?:px|pt))/i)?.[1]||'10px';
+  const weight=/\b(?:bold|[5-9]00)\b/i.test(font)?'700':'400';
+  const style=/\bitalic\b/i.test(font)?'italic':'normal';
+  return `${style} ${weight} ${size} ${SYSTEM_FONT}`;
+}
+
+globalThis.measureTextWidth=(font,text)=>{
+  if(!context)return 0;
+  context.font=normalizeCanvasFont(font);
+  return context.measureText(text??'').width;
+};
+
+function base64ToBytes(base64){
+  const binary=atob(base64),bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  return bytes;
+}
+
+async function ensureRuntime(){
+  if(!runtimeReady)runtimeReady=init({module_or_path:'./rhwp_bg.wasm'});
+  await runtimeReady;
+}
+
+function dispose(){
+  if(activeDocument&&typeof activeDocument.free==='function')activeDocument.free();
+  activeDocument=null;
+}
+
+function numericLength(value){
+  const match=String(value||'').match(/-?\d+(?:\.\d+)?/);
+  return match?Number(match[0]):0;
+}
+
+function normalizeSvg(svg){
+  let viewBox=svg.getAttribute('viewBox');
+  let w=numericLength(svg.getAttribute('width'));
+  let h=numericLength(svg.getAttribute('height'));
+  if(!viewBox&&w>0&&h>0){
+    viewBox=`0 0 ${w} ${h}`;
+    svg.setAttribute('viewBox',viewBox);
+  }
+  if(viewBox){
+    const parts=viewBox.trim().split(/[ ,]+/).map(Number);
+    if(parts.length===4&&parts.every(Number.isFinite)){
+      w=parts[2];h=parts[3];
+    }
+  }
+  svg.setAttribute('preserveAspectRatio','xMidYMin meet');
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
+  svg.style.width='100%';
+  svg.style.maxWidth='100%';
+  svg.style.height='auto';
+  svg.style.overflow='visible';
+  svg.querySelectorAll('text,tspan').forEach(node=>node.style.fontFamily=SYSTEM_FONT);
+  return w>0&&h>0?w/h:0;
+}
+
+function makePage(svgMarkup){
+  const shell=document.createElement('section');
+  shell.className='page-shell';
+  const page=document.createElement('div');
+  page.className='page';
+  page.innerHTML=svgMarkup;
+  const svg=page.querySelector('svg');
+  if(!svg)throw new Error('페이지 SVG를 생성하지 못했습니다.');
+  const ratio=normalizeSvg(svg);
+  if(ratio>0)page.style.aspectRatio=String(ratio);
+  shell.appendChild(page);
+  return shell;
+}
+
+async function renderDocument(base64){
+  status.className='';
+  status.textContent='문서를 불러오는 중입니다.';
+  viewer.replaceChildren();
+  try{
+    await ensureRuntime();
+    if(document.fonts?.ready)await document.fonts.ready;
+    dispose();
+    activeDocument=new HwpDocument(base64ToBytes(base64));
+    const count=activeDocument.pageCount();
+    if(!Number.isFinite(count)||count<1)throw new Error('표시할 페이지가 없습니다.');
+    const fragment=document.createDocumentFragment();
+    for(let i=0;i<count;i++)fragment.appendChild(makePage(activeDocument.renderPageSvg(i)));
+    viewer.appendChild(fragment);
+    status.textContent='';
+    status.className='ready';
+  }catch(error){
+    status.className='error';
+    status.textContent=`HWP/HWPX 문서를 표시할 수 없습니다.\n${error?.message||error}`;
+    viewer.replaceChildren();
+  }
+}
+
+window.openRhwpFromBase64=renderDocument;
+window.addEventListener('beforeunload',dispose);
+status.textContent='문서를 기다리고 있습니다.';
+</script>
+</body>
+</html>
