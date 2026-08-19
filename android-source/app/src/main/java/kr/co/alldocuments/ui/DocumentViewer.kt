@@ -8,6 +8,8 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.util.Base64
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -101,33 +103,71 @@ private fun RhwpWebView(base64: String) {
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
                 .build()
+
             WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
+
+                webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                        val message = "JS ${consoleMessage.messageLevel()}: ${consoleMessage.message()}"
+                        showRhwpStatus(this@apply, message, true)
+                        return true
+                    }
+                }
+
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                         assetLoader.shouldInterceptRequest(request.url)
+
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: android.webkit.WebResourceError
+                    ) {
+                        if (request.isForMainFrame) {
+                            showRhwpStatus(view, "WebView 로드 오류: ${error.description}", true)
+                        }
+                    }
 
                     override fun onPageFinished(view: WebView, url: String) {
                         val command = "window.openRhwpFromBase64(${jsString(base64)})"
                         fun send(attempt: Int) {
                             view.evaluateJavascript("typeof window.openRhwpFromBase64 === 'function'") { ready ->
-                                if (ready == "true") view.evaluateJavascript(command, null)
-                                else if (attempt < 40) view.postDelayed({ send(attempt + 1) }, 100)
+                                when {
+                                    ready == "true" -> view.evaluateJavascript(command, null)
+                                    attempt < 40 -> view.postDelayed({ send(attempt + 1) }, 100)
+                                    else -> showRhwpStatus(view, "RHWP 초기화 시간 초과: JavaScript 모듈이 준비되지 않았습니다.", true)
+                                }
                             }
                         }
-                        setTimeout(send = { send(0) })
+                        view.post { send(0) }
                     }
                 }
+
                 loadUrl("https://appassets.androidplatform.net/assets/rhwp-viewer/index.html")
             }
         }
     )
 }
 
-private fun WebView.setTimeout(send: () -> Unit) { post(send) }
-private fun jsString(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+private fun showRhwpStatus(view: WebView, message: String, isError: Boolean) {
+    val script = """
+        (() => {
+          const el = document.getElementById('status');
+          if (!el) return;
+          el.className = ${if (isError) "'error'" else "''"};
+          el.textContent = ${jsString(message)};
+        })();
+    """.trimIndent()
+    view.post { view.evaluateJavascript(script, null) }
+}
+
+private fun jsString(value: String): String = "\"" + value
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+    .replace("\n", "\\n") + "\""
 
 private fun loadDocument(resolver: android.content.ContentResolver, uri: Uri, kind: ViewerKind): ViewerState = when (kind) {
     ViewerKind.PDF -> {
