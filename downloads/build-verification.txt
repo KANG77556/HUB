@@ -1,8 +1,8 @@
 status=PASS
-source_commit=71813c0252f35a88ad85643915dbdf3edfb7cbfe
-workflow_run=32205233666
-apk_sha256=5368b1140c21d8a7a5d47b9e919f1971ea40a1d3d9d15f4da9fbb5987c539311
-apk_size=12979142
+source_commit=aa53facfa46d9fe49771c9d9b0b24a72624aa9ec
+workflow_run=32206902545
+apk_sha256=671192a343bc036d31d068b59b04f96997eb6b6e9fcd302a3bc416ea1612ceb5
+apk_size=12979226
 rhwp_index=PASS
 rhwp_js=PASS
 rhwp_wasm=PASS
