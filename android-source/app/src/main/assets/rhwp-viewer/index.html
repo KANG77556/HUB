@@ -14,7 +14,6 @@ html,body{margin:0;padding:0;background:var(--bg);font-family:"Noto Sans KR","Ma
 .page-shell{width:100%;margin:0 auto var(--gap);display:flex;justify-content:center;align-items:flex-start}
 .page{position:relative;width:100%;max-width:100%;background:var(--paper);border:1px solid rgba(17,24,39,.08);box-shadow:0 1px 2px rgba(0,0,0,.10);overflow:hidden}
 .page svg{display:block;width:100%;max-width:100%;height:auto;overflow:visible;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
-.page svg text,.page svg tspan{font-family:"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif!important}
 .error{display:block!important;color:#b00020;white-space:pre-wrap;padding:12px!important}
 </style>
 </head>
@@ -33,20 +32,17 @@ const status=document.getElementById('status');
 const viewer=document.getElementById('viewer');
 const canvas=document.createElement('canvas');
 const context=canvas.getContext('2d');
-const SYSTEM_FONT='"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+const FALLBACK_FONT='"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
 let runtimeReady,activeDocument=null;
 
-function normalizeCanvasFont(font){
-  if(!font)return `10px ${SYSTEM_FONT}`;
-  const size=String(font).match(/(?:^|\s)(\d+(?:\.\d+)?(?:px|pt))/i)?.[1]||'10px';
-  const weight=/\b(?:bold|[5-9]00)\b/i.test(font)?'700':'400';
-  const style=/\bitalic\b/i.test(font)?'italic':'normal';
-  return `${style} ${weight} ${size} ${SYSTEM_FONT}`;
+function canvasFontForMeasurement(font){
+  if(font&&String(font).trim())return font;
+  return `10px ${FALLBACK_FONT}`;
 }
 
 globalThis.measureTextWidth=(font,text)=>{
   if(!context)return 0;
-  context.font=normalizeCanvasFont(font);
+  context.font=canvasFontForMeasurement(font);
   return context.measureText(text??'').width;
 };
 
@@ -92,7 +88,6 @@ function normalizeSvg(svg){
   svg.style.maxWidth='100%';
   svg.style.height='auto';
   svg.style.overflow='visible';
-  svg.querySelectorAll('text,tspan').forEach(node=>node.style.fontFamily=SYSTEM_FONT);
   return w>0&&h>0?w/h:0;
 }
 
