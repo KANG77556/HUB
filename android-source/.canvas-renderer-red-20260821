@@ -1,0 +1,1 @@
+TDD RED checkpoint: test-rhwp-webview.sh now requires renderPageToCanvas and forbids renderPageSvg before implementation.
