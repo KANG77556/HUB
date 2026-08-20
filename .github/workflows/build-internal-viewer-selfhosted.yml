@@ -19,27 +19,31 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
-      - name: Diagnose local toolchain
+      - name: Discover local build toolchain
         run: |
-          echo === JAVA ===
-          where java
-          java -version
+          echo === JAVA PATH ===
+          where java 2>nul || echo java-not-on-path
           echo JAVA_HOME=%JAVA_HOME%
+          echo === COMMON JDK LOCATIONS ===
+          if exist "C:\Program Files\Android\Android Studio\jbr\bin\java.exe" echo JDK=C:\Program Files\Android\Android Studio\jbr
+          if exist "C:\Program Files\Android\Android Studio\jre\bin\java.exe" echo JDK=C:\Program Files\Android\Android Studio\jre
+          if exist "C:\Program Files\Java" dir /b "C:\Program Files\Java"
+          if exist "C:\Program Files\Eclipse Adoptium" dir /b "C:\Program Files\Eclipse Adoptium"
+          if exist "C:\Program Files\Microsoft\jdk-17\bin\java.exe" echo JDK=C:\Program Files\Microsoft\jdk-17
           echo === NODE/NPM ===
           where node
           node --version
           where npm
-          npm --version
+          call npm --version
           echo === GRADLE ===
-          where gradle
-          gradle --version
-          echo === ANDROID ===
+          where gradle 2>nul || echo gradle-not-on-path
+          if exist android-source\gradlew.bat call android-source\gradlew.bat --version
+          echo === ANDROID SDK ===
           echo ANDROID_HOME=%ANDROID_HOME%
           echo ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
-          where adb
-          adb version
-          where sdkmanager
-          sdkmanager --version
-          echo === PROJECT WRAPPER ===
+          if exist "%LOCALAPPDATA%\Android\Sdk" echo SDK=%LOCALAPPDATA%\Android\Sdk
+          if exist "C:\Android\Sdk" echo SDK=C:\Android\Sdk
+          if exist "C:\Users\Public\Android\Sdk" echo SDK=C:\Users\Public\Android\Sdk
+          if exist "%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe" "%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe" version
+          echo === PROJECT ===
           dir /b android-source
-          if exist android-source\gradlew.bat call android-source\gradlew.bat --version
