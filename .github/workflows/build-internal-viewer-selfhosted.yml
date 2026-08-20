@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -19,6 +19,8 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Prepare pinned portable JDK 17
         run: |
@@ -53,7 +55,6 @@ jobs:
           call npm pack @rhwp/core@0.8.4 --pack-destination "%TMPPKG%"
           for %%F in ("%TMPPKG%\*.tgz") do set "RHWP_TGZ=%%~fF"
           if not defined RHWP_TGZ exit /b 21
-          mkdir "%TMPPKG%\package"
           tar -xzf "%RHWP_TGZ%" -C "%TMPPKG%"
           for /r "%TMPPKG%\package" %%F in (rhwp.js) do if not defined RHWP_JS set "RHWP_JS=%%~fF"
           for /r "%TMPPKG%\package" %%F in (rhwp_bg.wasm) do if not defined RHWP_WASM set "RHWP_WASM=%%~fF"
@@ -62,8 +63,6 @@ jobs:
           copy /y "%RHWP_JS%" "%DEST%\rhwp.js" >nul
           copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
           if not exist "%DEST%\index.html" exit /b 24
-          if not exist "%DEST%\rhwp.js" exit /b 25
-          if not exist "%DEST%\rhwp_bg.wasm" exit /b 26
 
       - name: Verify internal-only viewer source
         run: |
@@ -85,16 +84,20 @@ jobs:
         run: |
           set "APK=android-source\app\build\outputs\apk\debug\app-debug.apk"
           if not exist "%APK%" exit /b 41
-          if %~z0 LSS 1 ver >nul
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
           certutil -hashfile "%APK%" SHA256
           for %%A in ("%APK%") do echo APK_SIZE=%%~zA
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: all-documents-debug-apk
-          path: android-source/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Publish verified APK to branch
+        run: |
+          if not exist downloads mkdir downloads
+          copy /y android-source\app\build\outputs\apk\debug\app-debug.apk downloads\all-documents-debug.apk >nul
+          certutil -hashfile downloads\all-documents-debug.apk SHA256 > downloads\all-documents-debug.sha256.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads\all-documents-debug.apk downloads\all-documents-debug.sha256.txt
+          git diff --cached --quiet && exit /b 0
+          git commit -m "build: publish verified internal viewer APK [skip ci]"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
