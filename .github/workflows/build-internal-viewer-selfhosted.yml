@@ -12,38 +12,89 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  build:
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
-      - name: Discover local build toolchain
+
+      - name: Prepare pinned portable JDK 17
         run: |
-          echo === JAVA PATH ===
-          where java 2>nul || echo java-not-on-path
-          echo JAVA_HOME=%JAVA_HOME%
-          echo === COMMON JDK LOCATIONS ===
-          if exist "C:\Program Files\Android\Android Studio\jbr\bin\java.exe" echo JDK=C:\Program Files\Android\Android Studio\jbr
-          if exist "C:\Program Files\Android\Android Studio\jre\bin\java.exe" echo JDK=C:\Program Files\Android\Android Studio\jre
-          if exist "C:\Program Files\Java" dir /b "C:\Program Files\Java"
-          if exist "C:\Program Files\Eclipse Adoptium" dir /b "C:\Program Files\Eclipse Adoptium"
-          if exist "C:\Program Files\Microsoft\jdk-17\bin\java.exe" echo JDK=C:\Program Files\Microsoft\jdk-17
-          echo === NODE/NPM ===
-          where node
-          node --version
-          where npm
-          call npm --version
-          echo === GRADLE ===
-          where gradle 2>nul || echo gradle-not-on-path
-          if exist android-source\gradlew.bat call android-source\gradlew.bat --version
-          echo === ANDROID SDK ===
-          echo ANDROID_HOME=%ANDROID_HOME%
-          echo ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
-          if exist "%LOCALAPPDATA%\Android\Sdk" echo SDK=%LOCALAPPDATA%\Android\Sdk
-          if exist "C:\Android\Sdk" echo SDK=C:\Android\Sdk
-          if exist "C:\Users\Public\Android\Sdk" echo SDK=C:\Users\Public\Android\Sdk
-          if exist "%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe" "%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe" version
-          echo === PROJECT ===
-          dir /b android-source
+          set "TOOLS=%RUNNER_TEMP%\hub-tools"
+          if exist "%TOOLS%" rmdir /s /q "%TOOLS%"
+          mkdir "%TOOLS%"
+          curl.exe -k -L --fail --retry 3 -o "%TOOLS%\jdk.zip" "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20+8/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20_8.zip"
+          certutil -hashfile "%TOOLS%\jdk.zip" SHA256 | findstr /i "418497be5cf585bdd2203d6486a565d66d3f5e992d5630d45104cb873fab8122" >nul || exit /b 11
+          mkdir "%TOOLS%\jdk"
+          tar -xf "%TOOLS%\jdk.zip" -C "%TOOLS%\jdk" --strip-components=1
+          "%TOOLS%\jdk\bin\java.exe" -version
+
+      - name: Prepare pinned Gradle 8.10.2
+        run: |
+          set "TOOLS=%RUNNER_TEMP%\hub-tools"
+          curl.exe -k -L --fail --retry 3 -o "%TOOLS%\gradle.zip" "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip"
+          certutil -hashfile "%TOOLS%\gradle.zip" SHA256 | findstr /i "31c55713e40233a8303827ceb42ca48a47267a0ad4bab9177123121e71524c26" >nul || exit /b 12
+          mkdir "%TOOLS%\gradle"
+          tar -xf "%TOOLS%\gradle.zip" -C "%TOOLS%\gradle" --strip-components=1
+          set "JAVA_HOME=%TOOLS%\jdk"
+          set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%PATH%"
+          gradle --version
+
+      - name: Vendor RHWP runtime
+        run: |
+          set "DEST=android-source\app\src\main\assets\rhwp-viewer"
+          if not exist "%DEST%" mkdir "%DEST%"
+          set "NPM_CONFIG_STRICT_SSL=false"
+          set "TMPPKG=%RUNNER_TEMP%\rhwp-runtime"
+          if exist "%TMPPKG%" rmdir /s /q "%TMPPKG%"
+          mkdir "%TMPPKG%"
+          call npm pack @rhwp/core@0.8.4 --pack-destination "%TMPPKG%"
+          for %%F in ("%TMPPKG%\*.tgz") do set "RHWP_TGZ=%%~fF"
+          if not defined RHWP_TGZ exit /b 21
+          mkdir "%TMPPKG%\package"
+          tar -xzf "%RHWP_TGZ%" -C "%TMPPKG%"
+          for /r "%TMPPKG%\package" %%F in (rhwp.js) do if not defined RHWP_JS set "RHWP_JS=%%~fF"
+          for /r "%TMPPKG%\package" %%F in (rhwp_bg.wasm) do if not defined RHWP_WASM set "RHWP_WASM=%%~fF"
+          if not defined RHWP_JS exit /b 22
+          if not defined RHWP_WASM exit /b 23
+          copy /y "%RHWP_JS%" "%DEST%\rhwp.js" >nul
+          copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
+          if not exist "%DEST%\index.html" exit /b 24
+          if not exist "%DEST%\rhwp.js" exit /b 25
+          if not exist "%DEST%\rhwp_bg.wasm" exit /b 26
+
+      - name: Verify internal-only viewer source
+        run: |
+          findstr /s /i /c:"ACTION_VIEW" android-source\app\src\main\java\*.kt >nul && exit /b 31 || ver >nul
+          findstr /s /i /c:"외부 앱으로 열기" android-source\app\src\main\java\*.kt >nul && exit /b 32 || ver >nul
+          findstr /i /c:"ViewerKind.OFFICE" android-source\app\src\main\java\kr\co\alldocuments\domain\DocumentViewerStrategy.kt >nul || exit /b 33
+
+      - name: Build debug APK
+        run: |
+          set "TOOLS=%RUNNER_TEMP%\hub-tools"
+          set "JAVA_HOME=%TOOLS%\jdk"
+          set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+          set "ANDROID_SDK_ROOT=%LOCALAPPDATA%\Android\Sdk"
+          set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%ANDROID_HOME%\platform-tools;%PATH%"
+          set "GRADLE_OPTS=-Djavax.net.ssl.trustStoreType=Windows-ROOT -Dorg.gradle.daemon=false"
+          gradle -p android-source --no-daemon assembleDebug
+
+      - name: Verify APK contents
+        run: |
+          set "APK=android-source\app\build\outputs\apk\debug\app-debug.apk"
+          if not exist "%APK%" exit /b 41
+          if %~z0 LSS 1 ver >nul
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
+          certutil -hashfile "%APK%" SHA256
+          for %%A in ("%APK%") do echo APK_SIZE=%%~zA
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: all-documents-debug-apk
+          path: android-source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
