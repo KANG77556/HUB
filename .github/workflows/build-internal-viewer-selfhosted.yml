@@ -16,31 +16,30 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
-        shell: powershell
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
       - name: Diagnose local toolchain
         run: |
-          $ErrorActionPreference = 'Continue'
-          Write-Host '=== JAVA ==='
-          where.exe java
+          echo === JAVA ===
+          where java
           java -version
-          Write-Host "JAVA_HOME=$env:JAVA_HOME"
-          Write-Host '=== NODE/NPM ==='
-          where.exe node
+          echo JAVA_HOME=%JAVA_HOME%
+          echo === NODE/NPM ===
+          where node
           node --version
-          where.exe npm
+          where npm
           npm --version
-          Write-Host '=== GRADLE ==='
-          where.exe gradle
+          echo === GRADLE ===
+          where gradle
           gradle --version
-          Write-Host '=== ANDROID ==='
-          Write-Host "ANDROID_HOME=$env:ANDROID_HOME"
-          Write-Host "ANDROID_SDK_ROOT=$env:ANDROID_SDK_ROOT"
-          where.exe adb
+          echo === ANDROID ===
+          echo ANDROID_HOME=%ANDROID_HOME%
+          echo ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
+          where adb
           adb version
-          where.exe sdkmanager
+          where sdkmanager
           sdkmanager --version
-          Write-Host '=== PROJECT WRAPPER ==='
-          Get-ChildItem 'android-source' -Name | Sort-Object
-          if (Test-Path 'android-source/gradlew.bat') { & 'android-source/gradlew.bat' --version }
+          echo === PROJECT WRAPPER ===
+          dir /b android-source
+          if exist android-source\gradlew.bat call android-source\gradlew.bat --version
