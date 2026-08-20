@@ -1,0 +1,3 @@
+SHA256의 downloads\all-documents-debug.apk 해시:
+929baae1c752588a4d2e4e4328da048f77a0c6a7859a26bf1ffb55d6e7dc204a
+CertUtil: -hashfile 명령이 성공적으로 완료되었습니다.
