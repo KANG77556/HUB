@@ -40,10 +40,11 @@ jobs:
           Write-Host "LOCALAPPDATA=$env:LOCALAPPDATA"
           Write-Host "USERPROFILE=$env:USERPROFILE"
 
-          where.exe java 2>$null | ForEach-Object { Write-Host "WHERE_JAVA=$_" }
-          where.exe javac 2>$null | ForEach-Object { Write-Host "WHERE_JAVAC=$_" }
-          where.exe winget 2>$null | ForEach-Object { Write-Host "WHERE_WINGET=$_" }
-          where.exe choco 2>$null | ForEach-Object { Write-Host "WHERE_CHOCO=$_" }
+          foreach ($name in @('java','javac','winget','choco')) {
+            $cmd = Get-Command $name -ErrorAction SilentlyContinue
+            if ($cmd) { Write-Host ("COMMAND_{0}={1}" -f $name.ToUpperInvariant(), $cmd.Source) }
+            else { Write-Host ("COMMAND_{0}=NOT_FOUND" -f $name.ToUpperInvariant()) }
+          }
 
           $direct = @(
             'C:\Program Files\Android\Android Studio\jbr',
@@ -57,6 +58,8 @@ jobs:
             'C:\ProgramData\chocolatey',
             'C:\tools',
             'C:\actions-runner',
+            'C:\Users\USER\AppData\Local',
+            'C:\Users\USER\AppData\Roaming',
             $env:LOCALAPPDATA,
             $env:USERPROFILE
           ) | Where-Object { $_ -and (Test-Path $_) }
@@ -66,7 +69,7 @@ jobs:
             Write-Host "SEARCH_ROOT=$root"
             try {
               Get-ChildItem -Path $root -Filter java.exe -File -Recurse -ErrorAction SilentlyContinue |
-                Select-Object -First 20 | ForEach-Object { $javaFiles.Add($_.FullName) }
+                Select-Object -First 50 | ForEach-Object { $javaFiles.Add($_.FullName) }
             } catch {
               Write-Host "SEARCH_WARN=$root :: $($_.Exception.Message)"
             }
