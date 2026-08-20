@@ -1,17 +1,21 @@
 package kr.co.alldocuments.domain
 
-enum class ViewerKind { PDF, IMAGE, TEXT, RHWP, UNSUPPORTED }
+enum class ViewerKind { PDF, IMAGE, TEXT, RHWP, OFFICE, UNSUPPORTED }
 
 object DocumentViewerStrategy {
     fun resolve(name: String, mimeType: String?): ViewerKind {
         val extension = name.substringAfterLast('.', "").lowercase()
         if (extension == "hwp" || extension == "hwpx") return ViewerKind.RHWP
+        if (extension in setOf("docx", "xlsx", "pptx")) return ViewerKind.OFFICE
 
         val mime = DocumentMimeResolver.resolve(name, mimeType).lowercase()
         return when {
             mime == "application/pdf" -> ViewerKind.PDF
             mime == "application/x-hwp" || mime == "application/haansofthwp" || mime == "application/vnd.hancom.hwp" -> ViewerKind.RHWP
             mime == "application/vnd.hancom.hwpx" || mime == "application/hwp+zip" -> ViewerKind.RHWP
+            mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> ViewerKind.OFFICE
+            mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> ViewerKind.OFFICE
+            mime == "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> ViewerKind.OFFICE
             mime.startsWith("image/") -> ViewerKind.IMAGE
             mime.startsWith("text/") -> ViewerKind.TEXT
             else -> ViewerKind.UNSUPPORTED

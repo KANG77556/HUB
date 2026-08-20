@@ -25,25 +25,83 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
-        shell: pwsh
+        shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+
+      - name: Ensure portable Java 17
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Find-Java17 {
+            $roots = @(
+              (Join-Path $env:RUNNER_TEMP 'jdk17'),
+              'C:\Program Files\Eclipse Adoptium',
+              'C:\Program Files\Microsoft',
+              'C:\Program Files\Java',
+              'C:\Program Files\Android\Android Studio\jbr'
+            )
+            foreach ($root in $roots) {
+              try {
+                if (-not (Test-Path -LiteralPath $root -ErrorAction SilentlyContinue)) { continue }
+                foreach ($file in (Get-ChildItem -LiteralPath $root -Filter java.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 50)) {
+                  $version = (& $file.FullName -version 2>&1 | Select-Object -First 1 | Out-String).Trim()
+                  Write-Host "JAVA_CANDIDATE=$($file.FullName) :: $version"
+                  if ($version -match '17') { return (Split-Path (Split-Path $file.FullName -Parent) -Parent) }
+                }
+              } catch { Write-Host "JAVA_SCAN_WARN=$root :: $($_.Exception.Message)" }
+            }
+            return $null
+          }
+
+          $javaHome = Find-Java17
+          if (-not $javaHome) {
+            $dest = Join-Path $env:RUNNER_TEMP 'jdk17'
+            $zip = Join-Path $env:RUNNER_TEMP 'temurin17.zip'
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+            if (Test-Path $zip) { Remove-Item $zip -Force }
+            New-Item -ItemType Directory -Path $dest | Out-Null
+
+            Write-Host 'Resolving Temurin 17 portable ZIP from GitHub Releases...'
+            $release = Invoke-RestMethod -Headers @{ 'User-Agent' = 'github-actions-runner' } -Uri 'https://api.github.com/repos/adoptium/temurin17-binaries/releases/latest'
+            $asset = $release.assets | Where-Object { $_.name -match '^OpenJDK17U-jdk_x64_windows_hotspot_.*\.zip$' } | Select-Object -First 1
+            if (-not $asset) { throw 'Temurin 17 Windows x64 ZIP asset not found.' }
+            Write-Host "JDK_ASSET=$($asset.name)"
+            Write-Host "JDK_URL=$($asset.browser_download_url)"
+
+            & curl.exe -L --fail --retry 3 --retry-delay 2 -o $zip $asset.browser_download_url
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zip)) { throw 'Portable JDK download failed.' }
+            Expand-Archive -Path $zip -DestinationPath $dest -Force
+            $javaHome = Find-Java17
+          }
+
+          if (-not $javaHome) { throw 'Java 17 is unavailable after portable setup.' }
+          "JAVA_HOME=$javaHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          (Join-Path $javaHome 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "JAVA_HOME_SELECTED=$javaHome"
+
+      - name: Verify Java
+        run: |
+          $ErrorActionPreference = 'Stop'
+          java -version
+          $version = (& java -version 2>&1 | Select-Object -First 1 | Out-String)
+          if ($version -notmatch '17') { throw "Java 17 is required. Found: $version" }
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - uses: android-actions/setup-android@v3
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+
       - name: Prepare source
         run: |
           if (-not (Test-Path 'android-source/app')) { throw 'android-source/app not found' }
           if (Test-Path 'all-documents-android') { Remove-Item 'all-documents-android' -Recurse -Force }
           Copy-Item 'android-source' 'all-documents-android' -Recurse -Force
+
       - name: Vendor RHWP browser runtime
         run: |
           $ErrorActionPreference = 'Stop'
@@ -61,9 +119,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item $js.FullName (Join-Path $dest 'rhwp.js') -Force
           Copy-Item $wasm.FullName (Join-Path $dest 'rhwp_bg.wasm') -Force
+
       - name: Build debug APK
         working-directory: all-documents-android
         run: gradle --no-daemon assembleDebug
+
       - name: Verify APK and RHWP runtime
         run: |
           $ErrorActionPreference = 'Stop'
@@ -75,7 +135,10 @@ jobs:
           @('assets/rhwp-viewer/index.html','assets/rhwp-viewer/rhwp.js','assets/rhwp-viewer/rhwp_bg.wasm') | ForEach-Object {
             if (-not (Test-Path (Join-Path $verifyDir $_))) { throw "APK missing $_" }
           }
-          Write-Host ((Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant())
+          $hash = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "APK_SHA256=$hash"
+          Write-Host "APK_SIZE=$((Get-Item $apk).Length)"
+
       - uses: actions/upload-artifact@v4
         with:
           name: all-documents-debug-apk
