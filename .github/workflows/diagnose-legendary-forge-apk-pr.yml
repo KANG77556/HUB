@@ -23,10 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Import game HTML from Google Drive
+      - name: Verify embedded game asset
         id: game_asset
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -Command "$candidates=@('G:\내 드라이브\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone.html','G:\My Drive\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone.html'); $src=$candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if(-not $src -and (Test-Path -LiteralPath 'G:\내 드라이브')) { $src=Get-ChildItem -LiteralPath 'G:\내 드라이브' -Filter 'LegendaryForge_Standalone.html' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }; if(-not $src){ throw 'LegendaryForge_Standalone.html not found in Google Drive sync' }; $dest='legendary-forge-apk\app\src\main\assets\index.html'; New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null; $html=[IO.File]::ReadAllText($src,[Text.Encoding]::UTF8).Replace('<script type=\"module\">','<script>'); [IO.File]::WriteAllText($dest,$html,(New-Object Text.UTF8Encoding($false))); Write-Host ('SOURCE=' + $src); Write-Host ('ASSET_SHA256=' + (Get-FileHash -Algorithm SHA256 $dest).Hash); Write-Host ('ASSET_BYTES=' + (Get-Item $dest).Length)"
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='legendary-forge-apk\app\src\main\assets\index.html'; if(-not (Test-Path -LiteralPath $p)){throw 'embedded game asset missing'}; $html=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); if($html.Length -lt 5000){throw 'embedded game asset too small'}; if(-not $html.Contains('legendary-forge-apk-v1')){throw 'game save marker missing'}; Write-Host ('ASSET_SHA256=' + (Get-FileHash -Algorithm SHA256 $p).Hash); Write-Host ('ASSET_BYTES=' + (Get-Item $p).Length)"
 
       - name: Prepare pinned portable JDK 17
         id: jdk
