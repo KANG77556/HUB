@@ -12,13 +12,27 @@ android {
         applicationId = "kr.co.alldocuments"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("ALLDOC_KEYSTORE_PATH") ?: "missing-release-key.jks")
+            storePassword = System.getenv("ALLDOC_KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("ALLDOC_KEY_ALIAS") ?: "alldocuments"
+            keyPassword = System.getenv("ALLDOC_KEY_PASSWORD") ?: ""
+        }
     }
 
     buildTypes {
+        debug {
+            isDebuggable = true
+        }
         release {
+            isDebuggable = false
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
