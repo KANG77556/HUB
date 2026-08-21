@@ -30,6 +30,9 @@ jobs:
       - name: Verify security hardening contract
         run: call android-source\scripts\test-security-hardening.cmd
 
+      - name: Verify document editing contract
+        run: call android-source\scripts\test-document-editing.cmd
+
       - name: Prepare pinned portable JDK 17
         run: |
           set "TOOLS=%RUNNER_TEMP%\hub-tools"
@@ -62,7 +65,7 @@ jobs:
           if exist "%TMPPKG%" rmdir /s /q "%TMPPKG%"
           mkdir "%TMPPKG%"
           call npm pack @rhwp/core@0.8.4 --pack-destination "%TMPPKG%"
-          for %%F in ("%TMPPKG%\*.tgz") do set "RHWP_TGZ=%%~fF"
+          for %%F in ("%TMPPKG%\*.tgz") do if not defined RHWP_TGZ set "RHWP_TGZ=%%~fF"
           if not defined RHWP_TGZ exit /b 21
           certutil -hashfile "%RHWP_TGZ%" SHA256 | findstr /i "%RHWP_TGZ_SHA256%" >nul || exit /b 22
           tar -xzf "%RHWP_TGZ%" -C "%TMPPKG%"
@@ -73,6 +76,12 @@ jobs:
           copy /y "%RHWP_JS%" "%DEST%\rhwp.js" >nul
           copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
           if not exist "%DEST%\index.html" exit /b 25
+
+      - name: Vendor pinned RHWP editor
+        run: |
+          set "RHWP_EDITOR_PACKAGE=@rhwp/editor@0.8.4"
+          set "RHWP_DISABLE_EXTERNAL_WEBFONTS=1"
+          call android-source\scripts\vendor-rhwp-editor.cmd
 
       - name: Verify internal-only viewer source
         run: |
@@ -97,6 +106,10 @@ jobs:
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-editor/index.html" >nul || exit /b 46
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-editor/host.js" >nul || exit /b 47
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-editor/sdk/index.js" >nul || exit /b 48
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-editor/studio/index.html" >nul || exit /b 49
           tar -tf "%APK%" | findstr /i /c:"res/" >nul || exit /b 45
           certutil -hashfile "%APK%" SHA256
           for %%A in ("%APK%") do echo APK_SIZE=%%~zA
