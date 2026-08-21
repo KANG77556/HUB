@@ -20,3 +20,4 @@ findstr /c:"renderPageToCanvas" "%HTML%" >nul || exit /b 22
 findstr /c:"ACTION_VIEW" "%VIEWER%" >nul && exit /b 23
 
 echo Polished document browser UI contract passed
+exit /b 0
