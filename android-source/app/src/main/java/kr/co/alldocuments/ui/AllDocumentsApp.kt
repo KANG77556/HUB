@@ -1,5 +1,6 @@
 package kr.co.alldocuments.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -61,13 +62,11 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
     var selectedDocument by remember { mutableStateOf<DocumentItem?>(null) }
     var pendingSaveAs by remember { mutableStateOf<SaveAsRequest?>(null) }
 
-    val saveAsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/plain")
-    ) { uri ->
+    fun persistSaveAs(uri: Uri?) {
         val request = pendingSaveAs
         if (uri == null || request == null) {
             pendingSaveAs = null
-            return@rememberLauncherForActivityResult
+            return
         }
         scope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -80,14 +79,33 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
         }
     }
 
+    val textSaveAsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+        onResult = ::persistSaveAs
+    )
+    val hwpSaveAsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-hwp"),
+        onResult = ::persistSaveAs
+    )
+    val hwpxSaveAsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.hancom.hwpx"),
+        onResult = ::persistSaveAs
+    )
+
+    fun launchSaveAs(request: SaveAsRequest) {
+        pendingSaveAs = request
+        when (request.mimeType) {
+            "application/x-hwp" -> hwpSaveAsLauncher.launch(request.fileName)
+            "application/vnd.hancom.hwpx" -> hwpxSaveAsLauncher.launch(request.fileName)
+            else -> textSaveAsLauncher.launch(request.fileName)
+        }
+    }
+
     if (selectedDocument != null) {
-        DocumentViewer(
+        EditableDocumentViewer(
             item = selectedDocument!!,
             onBack = { selectedDocument = null },
-            onSaveAsRequest = { request ->
-                pendingSaveAs = request
-                saveAsLauncher.launch(request.fileName)
-            }
+            onSaveAsRequest = ::launchSaveAs
         )
         return
     }
@@ -105,17 +123,9 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 36.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        item {
-            HeaderArea(onAdd = { picker.launch(arrayOf("*/*")) })
-        }
-
-        item {
-            DocumentSearchBar(query = state.query, onQueryChange = viewModel::setQuery)
-        }
-
-        item {
-            DocumentTypeFilterRow(selectedType = state.selectedType, onSelect = viewModel::setType)
-        }
+        item { HeaderArea(onAdd = { picker.launch(arrayOf("*/*")) }) }
+        item { DocumentSearchBar(query = state.query, onQueryChange = viewModel::setQuery) }
+        item { DocumentTypeFilterRow(selectedType = state.selectedType, onSelect = viewModel::setType) }
 
         if (state.documents.isEmpty()) {
             item { EmptyState(onAdd = { picker.launch(arrayOf("*/*")) }) }
@@ -198,10 +208,7 @@ private fun HeaderArea(onAdd: () -> Unit) {
 @Composable
 private fun AddDocumentButton(onClick: () -> Unit) {
     Surface(
-        modifier = Modifier
-            .size(56.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
+        modifier = Modifier.size(56.dp).clip(CircleShape).clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.primary,
         shape = CircleShape,
         shadowElevation = 6.dp
@@ -227,9 +234,7 @@ private fun DocumentSearchBar(query: String, onQueryChange: (String) -> Unit) {
         shadowElevation = 4.dp
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 17.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(13.dp)
         ) {
@@ -260,9 +265,7 @@ private fun DocumentSearchBar(query: String, onQueryChange: (String) -> Unit) {
             if (query.isNotBlank()) {
                 Text(
                     "×",
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { onQueryChange("") }
+                    modifier = Modifier.clip(CircleShape).clickable { onQueryChange("") }
                         .padding(horizontal = 5.dp, vertical = 2.dp),
                     fontSize = 21.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -380,21 +383,14 @@ private fun EmptyState(onAdd: () -> Unit) {
             modifier = Modifier.padding(horizontal = 22.dp, vertical = 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                "아직 추가된 문서가 없습니다.",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Text("아직 추가된 문서가 없습니다.", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "PDF, Word, Excel, PowerPoint, HWP/HWPX, 텍스트와 이미지 파일을 앱 안에서 바로 열 수 있습니다.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Surface(
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable(onClick = onAdd),
+                modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onAdd),
                 color = MaterialTheme.colorScheme.primary,
                 shape = RoundedCornerShape(14.dp)
             ) {
@@ -412,27 +408,19 @@ private fun EmptyState(onAdd: () -> Unit) {
 @Composable
 private fun DocumentListRow(item: DocumentItem, onFavorite: (String) -> Unit, onOpen: () -> Unit) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onOpen),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).clickable(onClick = onOpen),
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 4.dp
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 17.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             FileTypeBadge(item.type)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(
                     item.name,
                     style = MaterialTheme.typography.titleMedium,
@@ -441,27 +429,16 @@ private fun DocumentListRow(item: DocumentItem, onFavorite: (String) -> Unit, on
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    item.type.label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(item.type.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .clickable { onFavorite(item.id) },
+                modifier = Modifier.size(44.dp).clip(CircleShape).clickable { onFavorite(item.id) },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     if (item.isFavorite) "★" else "☆",
                     fontSize = 26.sp,
-                    color = if (item.isFavorite) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    color = if (item.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -479,7 +456,6 @@ private fun FileTypeBadge(type: DocumentType) {
         DocumentType.TEXT -> "TXT"
         DocumentType.OTHER -> "FILE"
     }
-
     Surface(
         modifier = Modifier.size(width = 64.dp, height = 64.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -490,13 +466,9 @@ private fun FileTypeBadge(type: DocumentType) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text("▤", fontSize = 22.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
             Text(
-                text = "▤",
-                fontSize = 22.sp,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-                text = label,
+                label,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
