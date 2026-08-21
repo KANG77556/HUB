@@ -1,0 +1,12 @@
+RUN_ID=32438232334
+COMMIT=6be7a213374a349dc24aaa849507a7bb20de039d
+UI=success
+SECURITY=success
+JDK=success
+GRADLE=success
+RHWP=success
+SIGN=success
+SOURCE=success
+RELEASE_BUILD=success
+RELEASE_VERIFY=failure
+RELEASE_PUBLISH=skipped
