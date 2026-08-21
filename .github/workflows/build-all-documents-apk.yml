@@ -2,11 +2,6 @@ name: Build All Documents APK
 
 on:
   push:
-    branches: [main, build/all-documents-android]
-    paths:
-      - '.github/workflows/build-all-documents-apk.yml'
-      - 'android-source/**'
-  pull_request:
     branches: [main]
     paths:
       - '.github/workflows/build-all-documents-apk.yml'
@@ -14,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: all-documents-apk-${{ github.ref }}
@@ -25,127 +20,76 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
-        shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
 
       - name: Verify UI design contract
-        shell: cmd
         run: call android-source\scripts\test-ui-design.cmd
 
-      - name: Ensure portable Java 17
+      - name: Prepare pinned portable JDK 17
         run: |
-          $ErrorActionPreference = 'Stop'
-          function Find-Java17 {
-            $roots = @(
-              (Join-Path $env:RUNNER_TEMP 'jdk17'),
-              'C:\Program Files\Eclipse Adoptium',
-              'C:\Program Files\Microsoft',
-              'C:\Program Files\Java',
-              'C:\Program Files\Android\Android Studio\jbr'
-            )
-            foreach ($root in $roots) {
-              try {
-                if (-not (Test-Path -LiteralPath $root -ErrorAction SilentlyContinue)) { continue }
-                foreach ($file in (Get-ChildItem -LiteralPath $root -Filter java.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 50)) {
-                  $version = (& $file.FullName -version 2>&1 | Select-Object -First 1 | Out-String).Trim()
-                  Write-Host "JAVA_CANDIDATE=$($file.FullName) :: $version"
-                  if ($version -match '17') { return (Split-Path (Split-Path $file.FullName -Parent) -Parent) }
-                }
-              } catch { Write-Host "JAVA_SCAN_WARN=$root :: $($_.Exception.Message)" }
-            }
-            return $null
-          }
+          set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
+          if exist "%TOOLS%" rmdir /s /q "%TOOLS%"
+          mkdir "%TOOLS%"
+          curl.exe -k -L --fail --retry 3 -o "%TOOLS%\jdk.zip" "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20+8/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20_8.zip"
+          certutil -hashfile "%TOOLS%\jdk.zip" SHA256 | findstr /i "418497be5cf585bdd2203d6486a565d66d3f5e992d5630d45104cb873fab8122" >nul || exit /b 11
+          mkdir "%TOOLS%\jdk"
+          tar -xf "%TOOLS%\jdk.zip" -C "%TOOLS%\jdk" --strip-components=1
+          "%TOOLS%\jdk\bin\java.exe" -version
 
-          $javaHome = Find-Java17
-          if (-not $javaHome) {
-            $dest = Join-Path $env:RUNNER_TEMP 'jdk17'
-            $zip = Join-Path $env:RUNNER_TEMP 'temurin17.zip'
-            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
-            if (Test-Path $zip) { Remove-Item $zip -Force }
-            New-Item -ItemType Directory -Path $dest | Out-Null
-
-            Write-Host 'Resolving Temurin 17 portable ZIP from GitHub Releases...'
-            $release = Invoke-RestMethod -Headers @{ 'User-Agent' = 'github-actions-runner' } -Uri 'https://api.github.com/repos/adoptium/temurin17-binaries/releases/latest'
-            $asset = $release.assets | Where-Object { $_.name -match '^OpenJDK17U-jdk_x64_windows_hotspot_.*\.zip$' } | Select-Object -First 1
-            if (-not $asset) { throw 'Temurin 17 Windows x64 ZIP asset not found.' }
-            Write-Host "JDK_ASSET=$($asset.name)"
-            Write-Host "JDK_URL=$($asset.browser_download_url)"
-
-            & curl.exe -L --fail --retry 3 --retry-delay 2 -o $zip $asset.browser_download_url
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zip)) { throw 'Portable JDK download failed.' }
-            Expand-Archive -Path $zip -DestinationPath $dest -Force
-            $javaHome = Find-Java17
-          }
-
-          if (-not $javaHome) { throw 'Java 17 is unavailable after portable setup.' }
-          "JAVA_HOME=$javaHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          (Join-Path $javaHome 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Write-Host "JAVA_HOME_SELECTED=$javaHome"
-
-      - name: Verify Java
+      - name: Prepare pinned Gradle 8.10.2
         run: |
-          $ErrorActionPreference = 'Stop'
-          java -version
-          $version = (& java -version 2>&1 | Select-Object -First 1 | Out-String)
-          if ($version -notmatch '17') { throw "Java 17 is required. Found: $version" }
+          set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
+          curl.exe -k -L --fail --retry 3 -o "%TOOLS%\gradle.zip" "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip"
+          certutil -hashfile "%TOOLS%\gradle.zip" SHA256 | findstr /i "31c55713e40233a8303827ceb42ca48a47267a0ad4bab9177123121e71524c26" >nul || exit /b 12
+          mkdir "%TOOLS%\gradle"
+          tar -xf "%TOOLS%\gradle.zip" -C "%TOOLS%\gradle" --strip-components=1
+          set "JAVA_HOME=%TOOLS%\jdk"
+          set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%PATH%"
+          gradle --version
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - uses: android-actions/setup-android@v3
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
-
-      - name: Prepare source
+      - name: Vendor RHWP runtime
         run: |
-          if (-not (Test-Path 'android-source/app')) { throw 'android-source/app not found' }
-          if (Test-Path 'all-documents-android') { Remove-Item 'all-documents-android' -Recurse -Force }
-          Copy-Item 'android-source' 'all-documents-android' -Recurse -Force
+          set "DEST=android-source\app\src\main\assets\rhwp-viewer"
+          if not exist "%DEST%" mkdir "%DEST%"
+          set "NPM_CONFIG_STRICT_SSL=false"
+          set "TMPPKG=%RUNNER_TEMP%\rhwp-runtime-main"
+          if exist "%TMPPKG%" rmdir /s /q "%TMPPKG%"
+          mkdir "%TMPPKG%"
+          call npm pack @rhwp/core@0.8.4 --pack-destination "%TMPPKG%"
+          for %%F in ("%TMPPKG%\*.tgz") do set "RHWP_TGZ=%%~fF"
+          if not defined RHWP_TGZ exit /b 21
+          tar -xzf "%RHWP_TGZ%" -C "%TMPPKG%"
+          for /r "%TMPPKG%\package" %%F in (rhwp.js) do if not defined RHWP_JS set "RHWP_JS=%%~fF"
+          for /r "%TMPPKG%\package" %%F in (rhwp_bg.wasm) do if not defined RHWP_WASM set "RHWP_WASM=%%~fF"
+          if not defined RHWP_JS exit /b 22
+          if not defined RHWP_WASM exit /b 23
+          copy /y "%RHWP_JS%" "%DEST%\rhwp.js" >nul
+          copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
 
-      - name: Vendor RHWP browser runtime
+      - name: Verify internal-only viewer source
         run: |
-          $ErrorActionPreference = 'Stop'
-          $tmp = Join-Path $env:RUNNER_TEMP 'rhwp-runtime'
-          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-          New-Item -ItemType Directory -Path $tmp | Out-Null
-          npm pack '@rhwp/core@0.8.4' --pack-destination $tmp
-          $pkg = Get-ChildItem $tmp -Filter '*.tgz' | Select-Object -First 1
-          if (-not $pkg) { throw 'RHWP npm package was not created' }
-          tar -xzf $pkg.FullName -C $tmp
-          $js = Get-ChildItem (Join-Path $tmp 'package') -Recurse -Filter 'rhwp.js' | Select-Object -First 1
-          $wasm = Get-ChildItem (Join-Path $tmp 'package') -Recurse -Filter 'rhwp_bg.wasm' | Select-Object -First 1
-          if (-not $js -or -not $wasm) { throw 'RHWP JS/WASM assets not found' }
-          $dest = 'all-documents-android/app/src/main/assets/rhwp-viewer'
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Copy-Item $js.FullName (Join-Path $dest 'rhwp.js') -Force
-          Copy-Item $wasm.FullName (Join-Path $dest 'rhwp_bg.wasm') -Force
+          findstr /s /i /c:"ACTION_VIEW" android-source\app\src\main\java\*.kt >nul && exit /b 31 || ver >nul
+          findstr /s /i /c:"외부 앱으로 열기" android-source\app\src\main\java\*.kt >nul && exit /b 32 || ver >nul
+          findstr /i /c:"ViewerKind.OFFICE" android-source\app\src\main\java\kr\co\alldocuments\domain\DocumentViewerStrategy.kt >nul || exit /b 33
 
       - name: Build debug APK
-        working-directory: all-documents-android
-        run: gradle --no-daemon assembleDebug
-
-      - name: Verify APK and RHWP runtime
         run: |
-          $ErrorActionPreference = 'Stop'
-          $apk = 'all-documents-android/app/build/outputs/apk/debug/app-debug.apk'
-          if (-not (Test-Path $apk) -or (Get-Item $apk).Length -eq 0) { throw 'APK was not created' }
-          $verifyDir = Join-Path $env:RUNNER_TEMP 'apk-verify'
-          if (Test-Path $verifyDir) { Remove-Item $verifyDir -Recurse -Force }
-          Expand-Archive -Path $apk -DestinationPath $verifyDir -Force
-          @('assets/rhwp-viewer/index.html','assets/rhwp-viewer/rhwp.js','assets/rhwp-viewer/rhwp_bg.wasm') | ForEach-Object {
-            if (-not (Test-Path (Join-Path $verifyDir $_))) { throw "APK missing $_" }
-          }
-          $hash = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "APK_SHA256=$hash"
-          Write-Host "APK_SIZE=$((Get-Item $apk).Length)"
+          set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
+          set "JAVA_HOME=%TOOLS%\jdk"
+          set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+          set "ANDROID_SDK_ROOT=%LOCALAPPDATA%\Android\Sdk"
+          set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%ANDROID_HOME%\platform-tools;%PATH%"
+          set "GRADLE_OPTS=-Djavax.net.ssl.trustStoreType=Windows-ROOT -Dorg.gradle.daemon=false"
+          gradle -p android-source --no-daemon assembleDebug
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: all-documents-debug-apk
-          path: all-documents-android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Verify APK contents
+        run: |
+          set "APK=android-source\app\build\outputs\apk\debug\app-debug.apk"
+          if not exist "%APK%" exit /b 41
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
+          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
+          certutil -hashfile "%APK%" SHA256
+          for %%A in ("%APK%") do echo APK_SIZE=%%~zA
