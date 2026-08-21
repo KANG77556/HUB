@@ -68,6 +68,9 @@ jobs:
         id: verify
         run: |
           setlocal EnableDelayedExpansion
+          set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
+          set "JAVA_HOME=!TOOLS!\jdk"
+          set "PATH=!JAVA_HOME!\bin;!PATH!"
           set "APK=legendary-forge-apk\app\build\outputs\apk\debug\app-debug.apk"
           set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
           if not exist "!APK!" exit /b 41
