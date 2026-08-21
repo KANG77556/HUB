@@ -103,3 +103,5 @@ jobs:
             legendary-forge-apk/dist/LegendaryForge-0.3.0-debug.apk
             legendary-forge-apk/dist/LegendaryForge-0.3.0-debug.sha256.txt
           retention-days: 7
+
+# trigger v0.3.0 verified build
