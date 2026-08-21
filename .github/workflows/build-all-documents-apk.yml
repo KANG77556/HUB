@@ -57,15 +57,14 @@ jobs:
           set "DEST=android-source\app\src\main\assets\rhwp-viewer"
           if not exist "%DEST%" mkdir "%DEST%"
           set "NPM_CONFIG_STRICT_SSL=false"
-          set "RHWP_TGZ_SHA1=07ca46da163c32f62f556b8b48acfcd274f855b2"
+          set "RHWP_TGZ_SHA256=156e9cbcc7fa2443b087efaceb5615eccb91117d83695cbb653f8755ca994e1e"
           set "TMPPKG=%RUNNER_TEMP%\rhwp-runtime-main"
           if exist "%TMPPKG%" rmdir /s /q "%TMPPKG%"
           mkdir "%TMPPKG%"
           call npm pack @rhwp/core@0.8.4 --pack-destination "%TMPPKG%"
           for %%F in ("%TMPPKG%\*.tgz") do set "RHWP_TGZ=%%~fF"
           if not defined RHWP_TGZ exit /b 21
-          certutil -hashfile "%RHWP_TGZ%" SHA1 | findstr /i "%RHWP_TGZ_SHA1%" >nul || exit /b 22
-          certutil -hashfile "%RHWP_TGZ%" SHA256
+          certutil -hashfile "%RHWP_TGZ%" SHA256 | findstr /i "%RHWP_TGZ_SHA256%" >nul || exit /b 22
           tar -xzf "%RHWP_TGZ%" -C "%TMPPKG%"
           for /r "%TMPPKG%\package" %%F in (rhwp.js) do if not defined RHWP_JS set "RHWP_JS=%%~fF"
           for /r "%TMPPKG%\package" %%F in (rhwp_bg.wasm) do if not defined RHWP_WASM set "RHWP_WASM=%%~fF"
