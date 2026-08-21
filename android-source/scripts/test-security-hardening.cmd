@@ -31,8 +31,8 @@ findstr /c:"versionName = \"1.1.0\"" "%GRADLE%" >nul || exit /b 30
 findstr /c:"signingConfigs" "%GRADLE%" >nul || exit /b 31
 findstr /c:"ALLDOC_KEYSTORE_PATH" "%GRADLE%" >nul || exit /b 32
 findstr /c:"@rhwp/core@0.8.4" "%PRWF%" >nul || exit /b 33
-findstr /c:"RHWP_TGZ_SHA1" "%PRWF%" >nul || exit /b 34
-findstr /c:"certutil -hashfile" "%PRWF%" >nul || exit /b 35
+findstr /c:"RHWP_TGZ_SHA256=156e9cbcc7fa2443b087efaceb5615eccb91117d83695cbb653f8755ca994e1e" "%PRWF%" >nul || exit /b 34
+findstr /c:"certutil -hashfile \"%%RHWP_TGZ%%\" SHA256" "%PRWF%" >nul || exit /b 35
 findstr /c:"assembleRelease" "%MAINWF%" >nul || exit /b 36
 findstr /c:"apksigner" "%MAINWF%" >nul || exit /b 37
 findstr /c:"all-documents-release.apk" "%MAINWF%" >nul || exit /b 38
