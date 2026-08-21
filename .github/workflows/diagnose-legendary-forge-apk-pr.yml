@@ -9,6 +9,7 @@ on:
       - 'legendary-forge-apk/build.gradle'
       - 'legendary-forge-apk/app/build.gradle'
       - 'legendary-forge-apk/app/src/main/**'
+      - 'legendary-forge-apk/v020-bundle/**'
 
 permissions:
   contents: write
@@ -26,10 +27,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify embedded game asset
-        id: game_asset
+      - name: Restore and verify v0.2.0 embedded game asset
+        shell: powershell
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='legendary-forge-apk\app\src\main\assets\index.html'; if(-not (Test-Path -LiteralPath $p)){throw 'embedded game asset missing'}; $html=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); if($html.Length -lt 5000){throw 'embedded game asset too small'}; if(-not $html.Contains('legendary-forge-apk-v1')){throw 'game save marker missing'}; Write-Host ('ASSET_SHA256=' + (Get-FileHash -Algorithm SHA256 $p).Hash); Write-Host ('ASSET_BYTES=' + (Get-Item $p).Length)"
+          $partRoot = 'legendary-forge-apk\v020-bundle'
+          $parts = @(Get-ChildItem -LiteralPath $partRoot -Filter 'part-*.b64' | Sort-Object Name)
+          if ($parts.Count -ne 3) { throw "expected 3 bundle parts, got $($parts.Count)" }
+          $b64 = ($parts | ForEach-Object { [IO.File]::ReadAllText($_.FullName, [Text.Encoding]::ASCII) }) -join ''
+          $gzBytes = [Convert]::FromBase64String($b64)
+          $input = New-Object IO.MemoryStream(,$gzBytes)
+          $gzip = New-Object IO.Compression.GzipStream($input, [IO.Compression.CompressionMode]::Decompress)
+          $output = New-Object IO.MemoryStream
+          $gzip.CopyTo($output)
+          $gzip.Dispose()
+          $input.Dispose()
+          $asset = 'legendary-forge-apk\app\src\main\assets\index.html'
+          [IO.File]::WriteAllBytes($asset, $output.ToArray())
+          $output.Dispose()
+          $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()
+          if ($hash -ne 'ce107df700e580334c3c8b1e307ebfa85c32744a372d30c107cf74e3f5c249d5') { throw "asset sha mismatch: $hash" }
+          $html = [IO.File]::ReadAllText($asset, [Text.Encoding]::UTF8)
+          if (-not $html.Contains('legendary-forge-apk-v2')) { throw 'v2 save marker missing' }
+          Write-Host ('ASSET_SHA256=' + $hash)
+          Write-Host ('ASSET_BYTES=' + (Get-Item $asset).Length)
+
+      - name: Verify Android version contract
+        run: |
+          findstr /c:"applicationId 'com.seongho.legendaryforge'" legendary-forge-apk\app\build.gradle >nul || exit /b 21
+          findstr /c:"versionCode 3" legendary-forge-apk\app\build.gradle >nul || exit /b 22
+          findstr /c:"versionName '0.2.0'" legendary-forge-apk\app\build.gradle >nul || exit /b 23
 
       - name: Prepare pinned portable JDK 17
         run: |
@@ -64,7 +90,7 @@ jobs:
           if not exist "%ANDROID_HOME%\platforms\android-35\android.jar" exit /b 31
           gradle -p legendary-forge-apk --no-daemon assembleDebug
 
-      - name: Verify APK signature and package
+      - name: Verify APK signature package and version
         run: |
           setlocal EnableDelayedExpansion
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
@@ -77,9 +103,17 @@ jobs:
           for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" apksigner.bat 2^>nul') do set "APKSIGNER=%%F"
           if not defined APKSIGNER exit /b 42
           call "!APKSIGNER!" verify --verbose --print-certs "!APK!" || exit /b 43
+          set "AAPT="
+          for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" aapt.exe 2^>nul') do set "AAPT=%%F"
+          if not defined AAPT exit /b 44
+          for /f "delims=" %%L in ('"!AAPT!" dump badging "!APK!" ^| findstr /b "package:"') do set "PKG=%%L"
+          echo PACKAGE_BADGING=!PKG!
+          echo(!PKG!| findstr /c:"name='com.seongho.legendaryforge'" >nul || exit /b 45
+          echo(!PKG!| findstr /c:"versionCode='3'" >nul || exit /b 46
+          echo(!PKG!| findstr /c:"versionName='0.2.0'" >nul || exit /b 47
           if not exist legendary-forge-apk\dist mkdir legendary-forge-apk\dist
-          copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-debug.apk >nul
-          powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Length)"
+          copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk >nul
+          powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Length)"
 
       - name: Publish verified APK to build branch
         run: |
@@ -87,7 +121,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin ci/legendary-forge-apk-20260821
           git checkout -B ci/legendary-forge-apk-20260821 origin/ci/legendary-forge-apk-20260821
-          git add -f legendary-forge-apk\dist\LegendaryForge-debug.apk legendary-forge-apk\dist\LegendaryForge-debug.sha256.txt
+          git add -f legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.sha256.txt
           git diff --cached --quiet && exit /b 0
-          git commit -m "build: publish verified Legendary Forge APK [skip ci]"
+          git commit -m "build: publish verified Legendary Forge 0.2.0 APK [skip ci]"
           git push origin HEAD:ci/legendary-forge-apk-20260821
