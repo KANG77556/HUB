@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -19,11 +19,12 @@ jobs:
         shell: cmd
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: build/all-documents-android
 
       - name: Verify UI design contract
         run: call android-source\scripts\test-ui-design.cmd
+
+      - name: Verify security hardening contract
+        run: call android-source\scripts\test-security-hardening.cmd
 
       - name: Prepare pinned portable JDK 17
         run: |
@@ -92,15 +93,3 @@ jobs:
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
           certutil -hashfile "%APK%" SHA256
           for %%A in ("%APK%") do echo APK_SIZE=%%~zA
-
-      - name: Publish verified APK to branch
-        run: |
-          if not exist downloads mkdir downloads
-          copy /y android-source\app\build\outputs\apk\debug\app-debug.apk downloads\all-documents-debug.apk >nul
-          certutil -hashfile downloads\all-documents-debug.apk SHA256 > downloads\all-documents-debug.sha256.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads\all-documents-debug.apk downloads\all-documents-debug.sha256.txt
-          git diff --cached --quiet && exit /b 0
-          git commit -m "build: publish redesigned document browser APK [skip ci]"
-          git push origin HEAD:build/all-documents-android
