@@ -26,6 +26,7 @@ findstr /c:"Intent.FLAG_GRANT_WRITE_URI_PERMISSION" "%SRC%\ui\DocumentViewModel.
 if not exist "%ASSETS%\index.html" exit /b 131
 if not exist "%ASSETS%\host.js" exit /b 132
 if not exist "%SRC%\ui\RhwpEditorWebView.kt" exit /b 133
+if not exist "%SRC%\ui\EditableDocumentViewer.kt" exit /b 145
 findstr /c:"assets/rhwp-editor/index.html" "%SRC%\ui\RhwpEditorWebView.kt" >nul || exit /b 134
 findstr /c:"settings.allowFileAccess = false" "%SRC%\ui\RhwpEditorWebView.kt" >nul || exit /b 135
 findstr /c:"settings.allowContentAccess = false" "%SRC%\ui\RhwpEditorWebView.kt" >nul || exit /b 136
@@ -33,6 +34,8 @@ findstr /c:"settings.allowUniversalAccessFromFileURLs = false" "%SRC%\ui\RhwpEdi
 findstr /c:"MAX_RHWP_EDITOR_BYTES" "%SRC%\ui\RhwpEditorWebView.kt" >nul || exit /b 138
 findstr /c:"exportHwp" "%ASSETS%\host.js" >nul || exit /b 139
 findstr /c:"exportHwpx" "%ASSETS%\host.js" >nul || exit /b 140
+findstr /c:"EditableDocumentViewer" "%SRC%\ui\AllDocumentsApp.kt" >nul || exit /b 146
+findstr /c:"RhwpEditorWebView" "%SRC%\ui\EditableDocumentViewer.kt" >nul || exit /b 147
 findstr /c:"@rhwp/editor@0.8.4" "%PRWF%" >nul || exit /b 141
 findstr /c:"RHWP_DISABLE_EXTERNAL_WEBFONTS=1" "%PRWF%" >nul || exit /b 142
 findstr /c:"@rhwp/editor@0.8.4" "%MAINWF%" >nul || exit /b 143
