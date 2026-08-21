@@ -24,3 +24,26 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify document editing contract
         run: call android-source\scripts\test-document-editing.cmd
+
+  editor-supply-chain-probe:
+    runs-on: [self-hosted, Windows, X64]
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Hash RHWP editor package and source archive
+        run: |
+          setlocal EnableDelayedExpansion
+          set "TMP=%RUNNER_TEMP%\rhwp-editor-probe"
+          if exist "!TMP!" rmdir /s /q "!TMP!"
+          mkdir "!TMP!"
+          set "NPM_CONFIG_STRICT_SSL=false"
+          call npm pack @rhwp/editor@0.8.4 --pack-destination "!TMP!"
+          for %%F in ("!TMP!\*.tgz") do set "EDITOR_TGZ=%%~fF"
+          if not defined EDITOR_TGZ exit /b 31
+          echo === RHWP_EDITOR_TGZ_SHA256 ===
+          certutil -hashfile "!EDITOR_TGZ!" SHA256
+          set "SOURCE_URL=https://github.com/edwardkim/rhwp/archive/496333b27d21ddb9114ba9ae340bcb895870c9a7.zip"
+          curl.exe -k -L --fail --retry 3 -o "!TMP!\rhwp-source.zip" "!SOURCE_URL!"
+          echo === RHWP_SOURCE_ZIP_SHA256 ===
+          certutil -hashfile "!TMP!\rhwp-source.zip" SHA256
