@@ -7,7 +7,7 @@ Add safe in-app editing and saving to All Documents without weakening the existi
 
 ### Phase A — TXT editing
 - TXT opens in the current internal viewer as today.
-- The top bar shows `편집` only for writable text documents.
+- The top bar shows `편집` for supported text documents even when the source URI is read-only, because read-only sources can still be edited and saved through Save As.
 - Entering edit mode replaces the read-only text surface with a multiline Compose text editor.
 - `저장` writes UTF-8 text back to the existing document URI when write access is available.
 - If the existing URI cannot be written, the app opens Android `CreateDocument` and saves a copy instead.
@@ -117,7 +117,7 @@ New hardened WebView wrapper used only for HWP/HWPX edit mode.
 
 ### Runtime tests
 - Open TXT → edit → save → re-open shows modified text.
-- TXT provider without write grant → Save As → new file opens with modified text.
+- TXT provider without write grant → edit → Save As → new file opens with modified text.
 - Cancel dirty TXT edit → confirmation → original remains unchanged.
 - HWP/HWPX editor loads offline with airplane mode enabled.
 - HWP/HWPX edit → export → save → existing viewer can reopen the result.
