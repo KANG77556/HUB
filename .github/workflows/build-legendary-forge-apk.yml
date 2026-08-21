@@ -26,13 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Import game HTML from Google Drive
-        id: game_asset
+      - name: Import verified v0.3.0 game HTML from Google Drive
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -Command "$candidates=@('G:\내 드라이브\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone.html','G:\My Drive\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone.html'); $src=$candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if(-not $src -and (Test-Path -LiteralPath 'G:\내 드라이브')) { $src=Get-ChildItem -LiteralPath 'G:\내 드라이브' -Filter 'LegendaryForge_Standalone.html' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }; if(-not $src){ throw 'LegendaryForge_Standalone.html not found in Google Drive sync' }; $dest='legendary-forge-apk\app\src\main\assets\index.html'; New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null; $html=[IO.File]::ReadAllText($src,[Text.Encoding]::UTF8).Replace('<script type=\"module\">','<script>'); [IO.File]::WriteAllText($dest,$html,(New-Object Text.UTF8Encoding($false))); Write-Host ('SOURCE=' + $src); Write-Host ('ASSET_SHA256=' + (Get-FileHash -Algorithm SHA256 $dest).Hash); Write-Host ('ASSET_BYTES=' + (Get-Item $dest).Length)"
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$candidates=@('G:\내 드라이브\04_게임개발\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone_v0.3.0.html','G:\My Drive\04_게임개발\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone_v0.3.0.html'); $src=$candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if(-not $src -and (Test-Path -LiteralPath 'G:\내 드라이브')) { $src=Get-ChildItem -LiteralPath 'G:\내 드라이브' -Filter 'LegendaryForge_Standalone_v0.3.0.html' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }; if(-not $src){ throw 'LegendaryForge_Standalone_v0.3.0.html not found in Google Drive sync' }; $dest='legendary-forge-apk\app\src\main\assets\index.html'; New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null; $html=[IO.File]::ReadAllText($src,[Text.Encoding]::UTF8); [IO.File]::WriteAllText($dest,$html,(New-Object Text.UTF8Encoding($false))); $sha=(Get-FileHash -Algorithm SHA256 $dest).Hash.ToLower(); if($sha -ne 'c0d392c59b4f54c78b70ed99977b7328a60d8f6238e662dd1f1644cc3945a52d'){ throw ('Unexpected HTML SHA256: '+$sha) }; Write-Host ('SOURCE=' + $src); Write-Host ('ASSET_SHA256=' + $sha); Write-Host ('ASSET_BYTES=' + (Get-Item $dest).Length)"
 
       - name: Prepare pinned portable JDK 17
-        id: jdk
         run: |
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools"
           if exist "%TOOLS%" rmdir /s /q "%TOOLS%"
@@ -44,7 +42,6 @@ jobs:
           "%TOOLS%\jdk\bin\java.exe" -version
 
       - name: Prepare pinned Gradle 8.10.2
-        id: gradle
         run: |
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools"
           curl.exe -k -L --fail --retry 3 -o "%TOOLS%\gradle.zip" "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip"
@@ -55,8 +52,7 @@ jobs:
           set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%PATH%"
           gradle --version
 
-      - name: Build installable debug APK
-        id: apk_build
+      - name: Build installable v0.3.0 debug APK
         run: |
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools"
           set "JAVA_HOME=%TOOLS%\jdk"
@@ -67,36 +63,41 @@ jobs:
           if not exist "%ANDROID_HOME%\platforms\android-35\android.jar" exit /b 31
           gradle -p legendary-forge-apk --no-daemon assembleDebug
 
-      - name: Verify APK signature and package
-        id: verify
+      - name: Verify v0.3.0 signature package version and embedded asset
         run: |
           setlocal EnableDelayedExpansion
           set "APK=legendary-forge-apk\app\build\outputs\apk\debug\app-debug.apk"
           set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
           if not exist "!APK!" exit /b 41
           set "APKSIGNER="
+          set "AAPT="
           for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" apksigner.bat 2^>nul') do set "APKSIGNER=%%F"
+          for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" aapt.exe 2^>nul') do set "AAPT=%%F"
           if not defined APKSIGNER exit /b 42
+          if not defined AAPT exit /b 44
           call "!APKSIGNER!" verify --verbose --print-certs "!APK!" || exit /b 43
+          "!AAPT!" dump badging "!APK!" | findstr /c:"package: name='com.seongho.legendaryforge' versionCode='5' versionName='0.3.0'" >nul || exit /b 45
+          if exist "%RUNNER_TEMP%\lf-apk-check" rmdir /s /q "%RUNNER_TEMP%\lf-apk-check"
+          mkdir "%RUNNER_TEMP%\lf-apk-check"
+          powershell -NoProfile -Command "Expand-Archive -LiteralPath '!APK!' -DestinationPath '%RUNNER_TEMP%\lf-apk-check'; $asset='%RUNNER_TEMP%\lf-apk-check\assets\index.html'; $sha=(Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower(); if($sha -ne 'c0d392c59b4f54c78b70ed99977b7328a60d8f6238e662dd1f1644cc3945a52d'){ throw ('Embedded asset SHA mismatch: '+$sha) }; Write-Host ('EMBEDDED_ASSET_SHA256=' + $sha)"
           if not exist legendary-forge-apk\dist mkdir legendary-forge-apk\dist
-          copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-debug.apk >nul
-          powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Length)"
+          copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.apk >nul
+          powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.apk').Length)"
 
-      - name: Publish APK to build branch
-        id: publish
+      - name: Publish verified v0.3.0 APK to build branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add legendary-forge-apk\dist\LegendaryForge-debug.apk legendary-forge-apk\dist\LegendaryForge-debug.sha256.txt
+          git add legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.apk legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.sha256.txt
           git diff --cached --quiet && exit /b 0
-          git commit -m "build: publish Legendary Forge APK [skip ci]"
+          git commit -m "build: publish verified Legendary Forge 0.3.0 APK [skip ci]"
           git push origin HEAD:ci/legendary-forge-apk-20260821
 
-      - name: Upload APK artifact
+      - name: Upload verified v0.3.0 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LegendaryForge-debug-apk
+          name: LegendaryForge-0.3.0-debug
           path: |
-            legendary-forge-apk/dist/LegendaryForge-debug.apk
-            legendary-forge-apk/dist/LegendaryForge-debug.sha256.txt
+            legendary-forge-apk/dist/LegendaryForge-0.3.0-debug.apk
+            legendary-forge-apk/dist/LegendaryForge-0.3.0-debug.sha256.txt
           retention-days: 7
