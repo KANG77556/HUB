@@ -48,25 +48,28 @@ jobs:
           set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%PATH%"
           gradle --version
 
-      - name: Vendor RHWP runtime
+      - name: Vendor pinned RHWP runtime
         run: |
           set "DEST=android-source\app\src\main\assets\rhwp-viewer"
           if not exist "%DEST%" mkdir "%DEST%"
           set "NPM_CONFIG_STRICT_SSL=false"
+          set "RHWP_TGZ_SHA1=07ca46da163c32f62f556b8b48acfcd274f855b2"
           set "TMPPKG=%RUNNER_TEMP%\rhwp-runtime"
           if exist "%TMPPKG%" rmdir /s /q "%TMPPKG%"
           mkdir "%TMPPKG%"
           call npm pack @rhwp/core@0.8.4 --pack-destination "%TMPPKG%"
           for %%F in ("%TMPPKG%\*.tgz") do set "RHWP_TGZ=%%~fF"
           if not defined RHWP_TGZ exit /b 21
+          certutil -hashfile "%RHWP_TGZ%" SHA1 | findstr /i "%RHWP_TGZ_SHA1%" >nul || exit /b 22
+          certutil -hashfile "%RHWP_TGZ%" SHA256
           tar -xzf "%RHWP_TGZ%" -C "%TMPPKG%"
           for /r "%TMPPKG%\package" %%F in (rhwp.js) do if not defined RHWP_JS set "RHWP_JS=%%~fF"
           for /r "%TMPPKG%\package" %%F in (rhwp_bg.wasm) do if not defined RHWP_WASM set "RHWP_WASM=%%~fF"
-          if not defined RHWP_JS exit /b 22
-          if not defined RHWP_WASM exit /b 23
+          if not defined RHWP_JS exit /b 23
+          if not defined RHWP_WASM exit /b 24
           copy /y "%RHWP_JS%" "%DEST%\rhwp.js" >nul
           copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
-          if not exist "%DEST%\index.html" exit /b 24
+          if not exist "%DEST%\index.html" exit /b 25
 
       - name: Verify internal-only viewer source
         run: |
@@ -91,5 +94,6 @@ jobs:
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
           tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
+          tar -tf "%APK%" | findstr /i /c:"res/" >nul || exit /b 45
           certutil -hashfile "%APK%" SHA256
           for %%A in ("%APK%") do echo APK_SIZE=%%~zA
