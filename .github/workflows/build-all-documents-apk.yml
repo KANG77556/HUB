@@ -128,6 +128,9 @@ jobs:
         id: release_verify
         run: |
           setlocal EnableDelayedExpansion
+          set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
+          set "JAVA_HOME=!TOOLS!\jdk"
+          set "PATH=!JAVA_HOME!\bin;!PATH!"
           set "APK=android-source\app\build\outputs\apk\release\app-release.apk"
           set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
           if not exist "!APK!" exit /b 41
