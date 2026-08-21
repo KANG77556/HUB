@@ -17,5 +17,6 @@ data class DocumentItem(
     val mimeType: String?,
     val type: DocumentType,
     val addedAt: Long,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val lastOpenedAt: Long = addedAt
 )

@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,35 +57,20 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.addDocument(uri)
+        if (uri != null) {
+            viewModel.addDocument(uri)?.let { selectedDocument = viewModel.openDocument(it) }
+        }
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 36.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "모든 문서",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        "필요한 문서를 한곳에서 빠르게 열어보세요",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                AddDocumentButton { picker.launch(arrayOf("*/*")) }
-            }
+            HeaderArea(onAdd = { picker.launch(arrayOf("*/*")) })
         }
 
         item {
@@ -101,7 +87,11 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
             if (state.query.isBlank() && state.selectedType == DocumentType.ALL && state.recentDocuments.isNotEmpty()) {
                 item { SectionHeader(title = "최근 문서", meta = "${state.recentDocuments.size}개") }
                 items(state.recentDocuments, key = { "recent-${it.id}" }) { item ->
-                    DocumentListRow(item, viewModel::toggleFavorite) { selectedDocument = item }
+                    DocumentListRow(
+                        item = item,
+                        onFavorite = viewModel::toggleFavorite,
+                        onOpen = { selectedDocument = viewModel.openDocument(item) }
+                    )
                 }
                 item { Spacer(Modifier.height(2.dp)) }
             }
@@ -118,19 +108,24 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        shape = RoundedCornerShape(24.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        shadowElevation = 2.dp
                     ) {
                         Text(
                             "검색 조건에 맞는 문서가 없습니다.",
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 24.dp),
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             } else {
                 items(state.filteredDocuments, key = { "all-${it.id}" }) { item ->
-                    DocumentListRow(item, viewModel::toggleFavorite) { selectedDocument = item }
+                    DocumentListRow(
+                        item = item,
+                        onFavorite = viewModel::toggleFavorite,
+                        onOpen = { selectedDocument = viewModel.openDocument(item) }
+                    )
                 }
             }
         }
@@ -138,15 +133,50 @@ fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
 }
 
 @Composable
+private fun HeaderArea(onAdd: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.weight(1f).padding(top = 2.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Text(
+                text = "모든 문서",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = "필요한 문서를 한곳에서 빠르게 열어보세요",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        AddDocumentButton(onClick = onAdd)
+    }
+}
+
+@Composable
 private fun AddDocumentButton(onClick: () -> Unit) {
     Surface(
-        modifier = Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onClick),
+        modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.primary,
         shape = CircleShape,
-        shadowElevation = 0.dp
+        shadowElevation = 6.dp
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text("+", fontSize = 25.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onPrimary)
+            Text(
+                text = "+",
+                fontSize = 31.sp,
+                fontWeight = FontWeight.Light,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
         }
     }
 }
@@ -156,15 +186,18 @@ private fun DocumentSearchBar(query: String, onQueryChange: (String) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 4.dp
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 17.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(13.dp)
         ) {
-            Text("⌕", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SearchGlyph()
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
@@ -172,14 +205,15 @@ private fun DocumentSearchBar(query: String, onQueryChange: (String) -> Unit) {
                 singleLine = true,
                 textStyle = TextStyle(
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Medium
                 ),
                 decorationBox = { inner ->
                     Box {
                         if (query.isBlank()) {
                             Text(
                                 "문서 검색",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -190,8 +224,11 @@ private fun DocumentSearchBar(query: String, onQueryChange: (String) -> Unit) {
             if (query.isNotBlank()) {
                 Text(
                     "×",
-                    modifier = Modifier.clip(CircleShape).clickable { onQueryChange("") }.padding(horizontal = 4.dp),
-                    fontSize = 20.sp,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { onQueryChange("") }
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                    fontSize = 21.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -200,28 +237,97 @@ private fun DocumentSearchBar(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
+private fun SearchGlyph() {
+    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+        Text("⌕", fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun DocumentTypeFilterRow(selectedType: DocumentType, onSelect: (DocumentType) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 1.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         items(DocumentType.entries) { type ->
             FilterChip(
                 selected = selectedType == type,
                 onClick = { onSelect(type) },
-                label = { Text(type.label) },
-                shape = RoundedCornerShape(12.dp)
+                label = {
+                    Text(
+                        text = filterLabel(type),
+                        fontWeight = if (selectedType == type) FontWeight.SemiBold else FontWeight.Medium
+                    )
+                },
+                leadingIcon = {
+                    Text(
+                        text = filterGlyph(type),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selectedType == type) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                },
+                shape = RoundedCornerShape(18.dp),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = selectedType == type,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant,
+                    selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                ),
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             )
         }
     }
 }
 
+private fun filterLabel(type: DocumentType): String = when (type) {
+    DocumentType.ALL -> "전체"
+    DocumentType.PDF -> "PDF"
+    DocumentType.WORD -> "Word"
+    DocumentType.EXCEL -> "Excel"
+    DocumentType.POWERPOINT -> "PowerPoint"
+    DocumentType.TEXT -> "텍스트"
+    DocumentType.OTHER -> "기타"
+}
+
+private fun filterGlyph(type: DocumentType): String = when (type) {
+    DocumentType.ALL -> "▦"
+    DocumentType.PDF -> "P"
+    DocumentType.WORD -> "W"
+    DocumentType.EXCEL -> "X"
+    DocumentType.POWERPOINT -> "P"
+    DocumentType.TEXT -> "≡"
+    DocumentType.OTHER -> "▱"
+}
+
 @Composable
 private fun SectionHeader(title: String, meta: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(meta, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            text = "$meta  ›",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -230,27 +336,35 @@ private fun EmptyState(onAdd: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("아직 추가된 문서가 없습니다.", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "아직 추가된 문서가 없습니다.",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
             Text(
                 "PDF, Word, Excel, PowerPoint, HWP/HWPX, 텍스트와 이미지 파일을 앱 안에서 바로 열 수 있습니다.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Surface(
-                modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onAdd),
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClick = onAdd),
                 color = MaterialTheme.colorScheme.primary,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(14.dp)
             ) {
                 Text(
                     "문서 추가",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
                     color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -262,40 +376,56 @@ private fun EmptyState(onAdd: () -> Unit) {
 @Composable
 private fun DocumentListRow(item: DocumentItem, onFavorite: (String) -> Unit, onOpen: () -> Unit) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onOpen),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .clickable(onClick = onOpen),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 4.dp
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 17.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             FileTypeBadge(item.type)
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
                 Text(
                     item.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     item.type.label,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Box(
-                modifier = Modifier.size(36.dp).clip(CircleShape).clickable { onFavorite(item.id) },
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable { onFavorite(item.id) },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     if (item.isFavorite) "★" else "☆",
-                    fontSize = 19.sp,
-                    color = if (item.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    fontSize = 26.sp,
+                    color = if (item.isFavorite) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
             }
         }
@@ -313,16 +443,28 @@ private fun FileTypeBadge(type: DocumentType) {
         DocumentType.TEXT -> "TXT"
         DocumentType.OTHER -> "FILE"
     }
-    Box(
-        modifier = Modifier.size(width = 46.dp, height = 42.dp).clip(RoundedCornerShape(11.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer),
-        contentAlignment = Alignment.Center
+
+    Surface(
+        modifier = Modifier.size(width = 64.dp, height = 64.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(18.dp)
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-        )
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "▤",
+                fontSize = 22.sp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
     }
 }

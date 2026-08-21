@@ -23,7 +23,7 @@ data class DocumentUiState(
         get() = filterDocuments(documents, query, selectedType)
 
     val recentDocuments: List<DocumentItem>
-        get() = documents.sortedByDescending { it.addedAt }.take(5)
+        get() = documents.sortedByDescending { it.lastOpenedAt }.take(5)
 
     val favoriteCount: Int
         get() = documents.count { it.isFavorite }
@@ -35,18 +35,35 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
     private val _state = MutableStateFlow(DocumentUiState(documents = store.load()))
     val state: StateFlow<DocumentUiState> = _state.asStateFlow()
 
-    fun addDocument(uri: Uri) {
+    fun addDocument(uri: Uri): DocumentItem? = runCatching {
         runCatching {
             getApplication<Application>().contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
         }
-        val item = metadataReader.read(uri)
+
+        val incoming = metadataReader.read(uri)
+        val existing = _state.value.documents.firstOrNull { it.uri == incoming.uri }
+        val item = incoming.copy(
+            isFavorite = existing?.isFavorite ?: incoming.isFavorite,
+            lastOpenedAt = System.currentTimeMillis()
+        )
         val updated = (_state.value.documents.filterNot { it.uri == item.uri } + item)
-            .sortedByDescending { it.addedAt }
+            .sortedByDescending { it.lastOpenedAt }
         store.save(updated)
         _state.update { it.copy(documents = updated) }
+        item
+    }.getOrNull()
+
+    fun openDocument(item: DocumentItem): DocumentItem {
+        val opened = item.copy(lastOpenedAt = System.currentTimeMillis())
+        val updated = _state.value.documents.map { current ->
+            if (current.id == item.id) opened else current
+        }.sortedByDescending { it.lastOpenedAt }
+        store.save(updated)
+        _state.update { it.copy(documents = updated) }
+        return opened
     }
 
     fun setQuery(query: String) = _state.update { it.copy(query = query) }
