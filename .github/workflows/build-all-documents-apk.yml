@@ -32,6 +32,10 @@ jobs:
         id: security
         run: call android-source\scripts\test-security-hardening.cmd
 
+      - name: Verify document editing contract
+        id: editing
+        run: call android-source\scripts\test-document-editing.cmd
+
       - name: Prepare pinned portable JDK 17
         id: jdk
         run: |
@@ -77,6 +81,13 @@ jobs:
           if not defined RHWP_WASM exit /b 24
           copy /y "%RHWP_JS%" "%DEST%\rhwp.js" >nul
           copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
+
+      - name: Vendor pinned RHWP editor
+        id: rhwp_editor
+        run: |
+          set "RHWP_EDITOR_PACKAGE=@rhwp/editor@0.8.4"
+          set "RHWP_DISABLE_EXTERNAL_WEBFONTS=1"
+          call android-source\scripts\vendor-rhwp-editor.cmd
 
       - name: Prepare persistent release signing key
         id: sign
@@ -137,6 +148,10 @@ jobs:
           tar -tf "!APK!" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
           tar -tf "!APK!" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
           tar -tf "!APK!" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
+          tar -tf "!APK!" | findstr /x /c:"assets/rhwp-editor/index.html" >nul || exit /b 47
+          tar -tf "!APK!" | findstr /x /c:"assets/rhwp-editor/host.js" >nul || exit /b 48
+          tar -tf "!APK!" | findstr /x /c:"assets/rhwp-editor/sdk/index.js" >nul || exit /b 49
+          tar -tf "!APK!" | findstr /x /c:"assets/rhwp-editor/studio/index.html" >nul || exit /b 50
           set "APKSIGNER="
           for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" apksigner.bat 2^>nul') do set "APKSIGNER=%%F"
           if not defined APKSIGNER exit /b 45
@@ -165,9 +180,11 @@ jobs:
           >> diagnostics\all-documents-main-build.txt echo COMMIT=${{ github.sha }}
           >> diagnostics\all-documents-main-build.txt echo UI=${{ steps.ui.outcome }}
           >> diagnostics\all-documents-main-build.txt echo SECURITY=${{ steps.security.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo EDITING=${{ steps.editing.outcome }}
           >> diagnostics\all-documents-main-build.txt echo JDK=${{ steps.jdk.outcome }}
           >> diagnostics\all-documents-main-build.txt echo GRADLE=${{ steps.gradle.outcome }}
           >> diagnostics\all-documents-main-build.txt echo RHWP=${{ steps.rhwp.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo RHWP_EDITOR=${{ steps.rhwp_editor.outcome }}
           >> diagnostics\all-documents-main-build.txt echo SIGN=${{ steps.sign.outcome }}
           >> diagnostics\all-documents-main-build.txt echo SOURCE=${{ steps.source.outcome }}
           >> diagnostics\all-documents-main-build.txt echo RELEASE_BUILD=${{ steps.release_build.outcome }}
