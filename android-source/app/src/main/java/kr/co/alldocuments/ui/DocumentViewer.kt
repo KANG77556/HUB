@@ -77,6 +77,9 @@ private const val MAX_PDF_BYTES = 80L * 1024L * 1024L
 private const val MAX_PDF_PAGES = 40
 private const val MAX_BITMAP_EDGE = 1600
 private const val MAX_PDF_TOTAL_PIXELS = 24_000_000L
+private const val EDIT_LABEL = "편집"
+private const val SAVE_LABEL = "저장"
+private const val CANCEL_LABEL = "취소"
 
 data class SaveAsRequest(
     val fileName: String,
@@ -290,7 +293,7 @@ private fun ViewerTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (editing) {
-                TextButton(onClick = onCancelEdit, enabled = !saving) { Text("취소") }
+                TextButton(onClick = onCancelEdit, enabled = !saving) { Text(CANCEL_LABEL) }
             } else {
                 IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) { BackChevron() }
             }
@@ -305,10 +308,10 @@ private fun ViewerTopBar(
             )
             if (editing) {
                 TextButton(onClick = onSave, enabled = !saving) {
-                    Text(if (saving) "저장 중…" else "저장")
+                    Text(if (saving) "$SAVE_LABEL 중…" else SAVE_LABEL)
                 }
             } else if (editable) {
-                TextButton(onClick = onEdit) { Text("편집") }
+                TextButton(onClick = onEdit) { Text(EDIT_LABEL) }
             }
         }
     }
