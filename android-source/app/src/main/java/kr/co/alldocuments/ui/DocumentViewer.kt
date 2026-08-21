@@ -71,6 +71,7 @@ private const val MAX_RHWP_BYTES = 50 * 1024 * 1024
 private const val MAX_PDF_BYTES = 80L * 1024L * 1024L
 private const val MAX_PDF_PAGES = 40
 private const val MAX_BITMAP_EDGE = 1600
+private const val MAX_PDF_TOTAL_PIXELS = 24_000_000L
 
 private sealed interface ViewerState {
     data object Loading : ViewerState
@@ -271,10 +272,13 @@ private fun loadDocument(
             PdfRenderer(pfd).use { renderer ->
                 require(renderer.pageCount <= MAX_PDF_PAGES) { "PDF는 최대 ${MAX_PDF_PAGES}페이지까지 열 수 있습니다." }
                 val pages = ArrayList<Bitmap>(renderer.pageCount)
+                var totalPixels = 0L
                 for (index in 0 until renderer.pageCount) renderer.openPage(index).use { page ->
                     val scale = min(1.5f, min(MAX_BITMAP_EDGE.toFloat() / page.width, MAX_BITMAP_EDGE.toFloat() / page.height))
                     val width = (page.width * scale).toInt().coerceAtLeast(1)
                     val height = (page.height * scale).toInt().coerceAtLeast(1)
+                    totalPixels += width.toLong() * height.toLong()
+                    require(totalPixels <= MAX_PDF_TOTAL_PIXELS) { "PDF 렌더링 메모리 한도를 초과합니다." }
                     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                     bitmap.eraseColor(android.graphics.Color.WHITE)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
