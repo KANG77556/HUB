@@ -97,6 +97,17 @@ jobs:
           copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.apk >nul
           powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.apk').Length)"
 
+      - name: Upload verified APK artifact
+        uses: actions/upload-artifact@v4
+        env:
+          NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        with:
+          name: LegendaryForge-0.2.1-debug
+          path: |
+            legendary-forge-apk/dist/LegendaryForge-0.2.1-debug.apk
+            legendary-forge-apk/dist/LegendaryForge-0.2.1-debug.sha256.txt
+          if-no-files-found: error
+
       - name: Publish verified APK to build branch
         run: |
           git config user.name "github-actions[bot]"
