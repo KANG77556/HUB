@@ -4,7 +4,8 @@ set "MANIFEST=android-source\app\src\main\AndroidManifest.xml"
 set "VIEWER=android-source\app\src\main\java\kr\co\alldocuments\ui\DocumentViewer.kt"
 set "OFFICE=android-source\app\src\main\java\kr\co\alldocuments\ui\InternalOfficePreview.kt"
 set "GRADLE=android-source\app\build.gradle.kts"
-set "WF=.github\workflows\build-internal-viewer-selfhosted.yml"
+set "PRWF=.github\workflows\build-internal-viewer-selfhosted.yml"
+set "MAINWF=.github\workflows\build-all-documents-apk.yml"
 
 findstr /c:"android:allowBackup=\"false\"" "%MANIFEST%" >nul || exit /b 11
 findstr /c:"android:usesCleartextTraffic=\"false\"" "%MANIFEST%" >nul || exit /b 12
@@ -25,12 +26,16 @@ findstr /c:"MAX_PDF_PAGES" "%VIEWER%" >nul || exit /b 26
 findstr /c:"versionName = \"1.1.0\"" "%GRADLE%" >nul || exit /b 27
 findstr /c:"signingConfigs" "%GRADLE%" >nul || exit /b 28
 findstr /c:"ALLDOC_KEYSTORE_PATH" "%GRADLE%" >nul || exit /b 29
-findstr /c:"@rhwp/core@0.8.4" "%WF%" >nul || exit /b 30
-findstr /c:"RHWP_TGZ_SHA1" "%WF%" >nul || exit /b 31
-findstr /c:"certutil -hashfile" "%WF%" >nul || exit /b 32
+findstr /c:"@rhwp/core@0.8.4" "%PRWF%" >nul || exit /b 30
+findstr /c:"RHWP_TGZ_SHA1" "%PRWF%" >nul || exit /b 31
+findstr /c:"certutil -hashfile" "%PRWF%" >nul || exit /b 32
+findstr /c:"assembleRelease" "%MAINWF%" >nul || exit /b 33
+findstr /c:"apksigner" "%MAINWF%" >nul || exit /b 34
+findstr /c:"all-documents-release.apk" "%MAINWF%" >nul || exit /b 35
+findstr /c:"Prepare persistent release signing key" "%MAINWF%" >nul || exit /b 36
 
-if not exist android-source\app\src\main\res\drawable\ic_launcher_foreground.xml exit /b 33
-if not exist android-source\app\src\main\res\mipmap-anydpi-v26\ic_launcher.xml exit /b 34
+if not exist android-source\app\src\main\res\drawable\ic_launcher_foreground.xml exit /b 37
+if not exist android-source\app\src\main\res\mipmap-anydpi-v26\ic_launcher.xml exit /b 38
 
 echo Security hardening contract passed
 exit /b 0
