@@ -9,6 +9,7 @@ import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.Canvas
@@ -57,8 +58,20 @@ import kotlinx.coroutines.withContext
 import kr.co.alldocuments.domain.DocumentItem
 import kr.co.alldocuments.domain.DocumentViewerStrategy
 import kr.co.alldocuments.domain.ViewerKind
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import kotlin.math.min
 
 private const val VIEWER_TOP_BAR_HEIGHT_DP = 48
+private const val SAFE_WEBVIEW_ORIGIN = "appassets.androidplatform.net"
+private const val MAX_TEXT_BYTES = 5 * 1024 * 1024
+private const val MAX_IMAGE_BYTES = 25 * 1024 * 1024
+private const val MAX_RHWP_BYTES = 50 * 1024 * 1024
+private const val MAX_PDF_BYTES = 80L * 1024L * 1024L
+private const val MAX_PDF_PAGES = 40
+private const val MAX_BITMAP_EDGE = 1600
+private const val MAX_PDF_TOTAL_PIXELS = 24_000_000L
 
 private sealed interface ViewerState {
     data object Loading : ViewerState
@@ -137,9 +150,7 @@ private fun ViewerTopBar(fileName: String, onBack: () -> Unit) {
             Modifier.fillMaxWidth().height(VIEWER_TOP_BAR_HEIGHT_DP.dp).padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                BackChevron()
-            }
+            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) { BackChevron() }
             Text(
                 fileName,
                 modifier = Modifier.weight(1f).padding(start = 2.dp, end = 12.dp),
@@ -155,82 +166,164 @@ private fun ViewerTopBar(fileName: String, onBack: () -> Unit) {
 
 @Composable
 private fun BackChevron() {
-    Canvas(
-        modifier = Modifier.size(22.dp).semantics { contentDescription = "뒤로" }
-    ) {
+    Canvas(modifier = Modifier.size(22.dp).semantics { contentDescription = "뒤로" }) {
         val stroke = 2.dp.toPx()
         val xRight = size.width * 0.64f
         val xLeft = size.width * 0.36f
         val yTop = size.height * 0.25f
         val yMid = size.height * 0.5f
         val yBottom = size.height * 0.75f
-        drawLine(
-            color = Color(0xFF374151),
-            start = Offset(xRight, yTop),
-            end = Offset(xLeft, yMid),
-            strokeWidth = stroke,
-            cap = StrokeCap.Round
-        )
-        drawLine(
-            color = Color(0xFF374151),
-            start = Offset(xLeft, yMid),
-            end = Offset(xRight, yBottom),
-            strokeWidth = stroke,
-            cap = StrokeCap.Round
-        )
+        drawLine(Color(0xFF374151), Offset(xRight, yTop), Offset(xLeft, yMid), stroke, StrokeCap.Round)
+        drawLine(Color(0xFF374151), Offset(xLeft, yMid), Offset(xRight, yBottom), stroke, StrokeCap.Round)
     }
 }
 
 @Composable
 private fun RhwpWebView(base64: String) {
     AndroidView(modifier = Modifier.fillMaxSize(), factory = { context ->
-        val loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
+        val loader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+            .build()
         WebView(context).apply {
+            WebView.setWebContentsDebuggingEnabled(false)
             settings.javaScriptEnabled = true
+            settings.javaScriptCanOpenWindowsAutomatically = false
             settings.allowFileAccess = false
             settings.allowContentAccess = false
+            settings.allowFileAccessFromFileURLs = false
+            settings.allowUniversalAccessFromFileURLs = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            settings.domStorageEnabled = false
+            settings.databaseEnabled = false
+            settings.setGeolocationEnabled(false)
+            settings.mediaPlaybackRequiresUserGesture = true
             settings.setSupportZoom(true)
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
             settings.loadWithOverviewMode = true
             settings.useWideViewPort = true
             webChromeClient = object : WebChromeClient() {
-                override fun onConsoleMessage(message: ConsoleMessage): Boolean { showRhwpStatus(this@apply, "JS: ${message.message()}", true); return true }
+                override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                    showRhwpStatus(this@apply, "JS: ${message.message()}", true)
+                    return true
+                }
             }
             webViewClient = object : WebViewClient() {
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? = loader.shouldInterceptRequest(request.url)
-                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) { if (request.isForMainFrame) showRhwpStatus(view, "WebView 오류: ${error.description}", true) }
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !isSafeWebViewUrl(request.url)
+
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                    return if (isSafeWebViewUrl(request.url)) loader.shouldInterceptRequest(request.url) else blockedWebResponse()
+                }
+
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                    if (request.isForMainFrame) showRhwpStatus(view, "WebView 오류: ${error.description}", true)
+                }
+
                 override fun onPageFinished(view: WebView, url: String) {
+                    if (!isSafeWebViewUrl(Uri.parse(url))) return
                     val command = "window.openRhwpFromBase64(${jsString(base64)})"
-                    fun send(attempt: Int) { view.evaluateJavascript("typeof window.openRhwpFromBase64 === 'function'") { ready -> if (ready == "true") view.evaluateJavascript(command, null) else if (attempt < 40) view.postDelayed({ send(attempt + 1) }, 100) else showRhwpStatus(view, "RHWP 초기화 시간 초과", true) } }
+                    fun send(attempt: Int) {
+                        view.evaluateJavascript("typeof window.openRhwpFromBase64 === 'function'") { ready ->
+                            if (ready == "true") view.evaluateJavascript(command, null)
+                            else if (attempt < 40) view.postDelayed({ send(attempt + 1) }, 100)
+                            else showRhwpStatus(view, "RHWP 초기화 시간 초과", true)
+                        }
+                    }
                     view.post { send(0) }
                 }
             }
-            loadUrl("https://appassets.androidplatform.net/assets/rhwp-viewer/index.html")
+            loadUrl("https://$SAFE_WEBVIEW_ORIGIN/assets/rhwp-viewer/index.html")
         }
     })
 }
 
+private fun isSafeWebViewUrl(uri: Uri): Boolean = uri.scheme == "https" && uri.host == SAFE_WEBVIEW_ORIGIN
+
+private fun blockedWebResponse(): WebResourceResponse = WebResourceResponse(
+    "text/plain",
+    "utf-8",
+    403,
+    "Blocked",
+    emptyMap(),
+    ByteArrayInputStream(ByteArray(0))
+)
+
 private fun showRhwpStatus(view: WebView, message: String, error: Boolean) {
-    view.post { view.evaluateJavascript("(()=>{const e=document.getElementById('status');if(e){e.className=${if (error) "'error'" else "''"};e.textContent=${jsString(message)}}})();", null) }
+    view.post {
+        view.evaluateJavascript(
+            "(()=>{const e=document.getElementById('status');if(e){e.className=${if (error) "'error'" else "''"};e.textContent=${jsString(message)}}})();",
+            null
+        )
+    }
 }
+
 private fun jsString(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
 
-private fun loadDocument(resolver: android.content.ContentResolver, uri: Uri, name: String, kind: ViewerKind): ViewerState = when (kind) {
+private fun loadDocument(
+    resolver: android.content.ContentResolver,
+    uri: Uri,
+    name: String,
+    kind: ViewerKind
+): ViewerState = when (kind) {
     ViewerKind.PDF -> {
         val descriptor = resolver.openFileDescriptor(uri, "r") ?: error("파일을 열 수 없습니다.")
-        descriptor.use { pfd -> PdfRenderer(pfd).use { renderer ->
-            val pages = ArrayList<Bitmap>(renderer.pageCount)
-            for (index in 0 until renderer.pageCount) renderer.openPage(index).use { page ->
-                val bitmap = Bitmap.createBitmap((page.width * 1.5f).toInt().coerceAtLeast(1), (page.height * 1.5f).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-                bitmap.eraseColor(android.graphics.Color.WHITE); page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY); pages += bitmap
+        descriptor.use { pfd ->
+            if (pfd.statSize > MAX_PDF_BYTES) error("PDF가 80MB를 초과합니다.")
+            PdfRenderer(pfd).use { renderer ->
+                require(renderer.pageCount <= MAX_PDF_PAGES) { "PDF는 최대 ${MAX_PDF_PAGES}페이지까지 열 수 있습니다." }
+                val pages = ArrayList<Bitmap>(renderer.pageCount)
+                var totalPixels = 0L
+                for (index in 0 until renderer.pageCount) renderer.openPage(index).use { page ->
+                    val scale = min(1.5f, min(MAX_BITMAP_EDGE.toFloat() / page.width, MAX_BITMAP_EDGE.toFloat() / page.height))
+                    val width = (page.width * scale).toInt().coerceAtLeast(1)
+                    val height = (page.height * scale).toInt().coerceAtLeast(1)
+                    totalPixels += width.toLong() * height.toLong()
+                    require(totalPixels <= MAX_PDF_TOTAL_PIXELS) { "PDF 렌더링 메모리 한도를 초과합니다." }
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    bitmap.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    pages += bitmap
+                }
+                ViewerState.Pdf(pages)
             }
-            ViewerState.Pdf(pages)
-        }}
+        }
     }
-    ViewerKind.IMAGE -> resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it)?.let(ViewerState::ImageContent) ?: error("이미지를 해석할 수 없습니다.") } ?: error("이미지를 열 수 없습니다.")
-    ViewerKind.TEXT -> resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { ViewerState.TextContent(it.readText().take(2_000_000)) } ?: error("텍스트를 열 수 없습니다.")
-    ViewerKind.RHWP -> resolver.openInputStream(uri)?.use { val bytes = it.readBytes(); require(bytes.size <= 50 * 1024 * 1024); ViewerState.Rhwp(Base64.encodeToString(bytes, Base64.NO_WRAP)) } ?: error("HWP/HWPX를 열 수 없습니다.")
+
+    ViewerKind.IMAGE -> resolver.openInputStream(uri)?.use { input ->
+        val bytes = readLimitedBytes(input, MAX_IMAGE_BYTES)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "이미지를 해석할 수 없습니다." }
+        var sample = 1
+        while (bounds.outWidth / sample > 4096 || bounds.outHeight / sample > 4096) sample *= 2
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.let(ViewerState::ImageContent)
+            ?: error("이미지를 해석할 수 없습니다.")
+    } ?: error("이미지를 열 수 없습니다.")
+
+    ViewerKind.TEXT -> resolver.openInputStream(uri)?.use {
+        ViewerState.TextContent(readLimitedBytes(it, MAX_TEXT_BYTES).toString(Charsets.UTF_8))
+    } ?: error("텍스트를 열 수 없습니다.")
+
+    ViewerKind.RHWP -> resolver.openInputStream(uri)?.use {
+        val bytes = readLimitedBytes(it, MAX_RHWP_BYTES)
+        ViewerState.Rhwp(Base64.encodeToString(bytes, Base64.NO_WRAP))
+    } ?: error("HWP/HWPX를 열 수 없습니다.")
+
     ViewerKind.OFFICE -> ViewerState.Office(loadOfficePreview(resolver, uri, name))
     ViewerKind.UNSUPPORTED -> ViewerState.Error("이 파일 형식은 현재 내부 뷰어에서 읽을 수 없습니다.")
+}
+
+private fun readLimitedBytes(input: InputStream, maxBytes: Int): ByteArray {
+    val output = ByteArrayOutputStream(min(maxBytes, 64 * 1024))
+    val buffer = ByteArray(16 * 1024)
+    var total = 0
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) break
+        total += read
+        require(total <= maxBytes) { "파일 크기가 허용 한도를 초과합니다." }
+        output.write(buffer, 0, read)
+    }
+    return output.toByteArray()
 }

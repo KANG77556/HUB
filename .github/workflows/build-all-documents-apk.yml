@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: all-documents-apk-${{ github.ref }}
@@ -26,6 +26,9 @@ jobs:
 
       - name: Verify UI design contract
         run: call android-source\scripts\test-ui-design.cmd
+
+      - name: Verify security hardening contract
+        run: call android-source\scripts\test-security-hardening.cmd
 
       - name: Prepare pinned portable JDK 17
         run: |
@@ -49,24 +52,53 @@ jobs:
           set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%PATH%"
           gradle --version
 
-      - name: Vendor RHWP runtime
+      - name: Vendor pinned RHWP runtime
         run: |
           set "DEST=android-source\app\src\main\assets\rhwp-viewer"
           if not exist "%DEST%" mkdir "%DEST%"
           set "NPM_CONFIG_STRICT_SSL=false"
+          set "RHWP_TGZ_SHA256=156e9cbcc7fa2443b087efaceb5615eccb91117d83695cbb653f8755ca994e1e"
           set "TMPPKG=%RUNNER_TEMP%\rhwp-runtime-main"
           if exist "%TMPPKG%" rmdir /s /q "%TMPPKG%"
           mkdir "%TMPPKG%"
           call npm pack @rhwp/core@0.8.4 --pack-destination "%TMPPKG%"
           for %%F in ("%TMPPKG%\*.tgz") do set "RHWP_TGZ=%%~fF"
           if not defined RHWP_TGZ exit /b 21
+          certutil -hashfile "%RHWP_TGZ%" SHA256 | findstr /i "%RHWP_TGZ_SHA256%" >nul || exit /b 22
           tar -xzf "%RHWP_TGZ%" -C "%TMPPKG%"
           for /r "%TMPPKG%\package" %%F in (rhwp.js) do if not defined RHWP_JS set "RHWP_JS=%%~fF"
           for /r "%TMPPKG%\package" %%F in (rhwp_bg.wasm) do if not defined RHWP_WASM set "RHWP_WASM=%%~fF"
-          if not defined RHWP_JS exit /b 22
-          if not defined RHWP_WASM exit /b 23
+          if not defined RHWP_JS exit /b 23
+          if not defined RHWP_WASM exit /b 24
           copy /y "%RHWP_JS%" "%DEST%\rhwp.js" >nul
           copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
+
+      - name: Prepare persistent release signing key
+        run: |
+          setlocal EnableDelayedExpansion
+          set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
+          set "JAVA_HOME=%TOOLS%\jdk"
+          set "PATH=%JAVA_HOME%\bin;%PATH%"
+          set "KEYDIR=%USERPROFILE%\.alldocuments-release"
+          set "KEYFILE=!KEYDIR!\all-documents-release.jks"
+          set "PASSFILE=!KEYDIR!\release-pass.txt"
+          if not exist "!KEYDIR!" mkdir "!KEYDIR!"
+          if not exist "!PASSFILE!" (
+            set "KS_PASS=AD!RANDOM!!RANDOM!!RANDOM!!RANDOM!z9"
+            >"!PASSFILE!" echo !KS_PASS!
+          )
+          for /f "usebackq delims=" %%P in ("!PASSFILE!") do set "KS_PASS=%%P"
+          echo ::add-mask::!KS_PASS!
+          if not exist "!KEYFILE!" (
+            keytool -genkeypair -v -keystore "!KEYFILE!" -storepass "!KS_PASS!" -keypass "!KS_PASS!" -alias alldocuments -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=All Documents Release,O=Local Android Release,C=KR"
+            if errorlevel 1 exit /b 51
+          )
+          icacls "!KEYDIR!" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)F" >nul 2>&1 || ver >nul
+          echo ALLDOC_KEYSTORE_PATH=!KEYFILE!>>"%GITHUB_ENV%"
+          echo ALLDOC_KEYSTORE_PASSWORD=!KS_PASS!>>"%GITHUB_ENV%"
+          echo ALLDOC_KEY_ALIAS=alldocuments>>"%GITHUB_ENV%"
+          echo ALLDOC_KEY_PASSWORD=!KS_PASS!>>"%GITHUB_ENV%"
+          keytool -list -v -keystore "!KEYFILE!" -storepass "!KS_PASS!" -alias alldocuments | findstr /i /c:"SHA256:" /c:"Valid from"
 
       - name: Verify internal-only viewer source
         run: |
@@ -74,7 +106,7 @@ jobs:
           findstr /s /i /c:"외부 앱으로 열기" android-source\app\src\main\java\*.kt >nul && exit /b 32 || ver >nul
           findstr /i /c:"ViewerKind.OFFICE" android-source\app\src\main\java\kr\co\alldocuments\domain\DocumentViewerStrategy.kt >nul || exit /b 33
 
-      - name: Build debug APK
+      - name: Build signed release APK
         run: |
           set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
           set "JAVA_HOME=%TOOLS%\jdk"
@@ -82,14 +114,32 @@ jobs:
           set "ANDROID_SDK_ROOT=%LOCALAPPDATA%\Android\Sdk"
           set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%ANDROID_HOME%\platform-tools;%PATH%"
           set "GRADLE_OPTS=-Djavax.net.ssl.trustStoreType=Windows-ROOT -Dorg.gradle.daemon=false"
-          gradle -p android-source --no-daemon assembleDebug
+          gradle -p android-source --no-daemon assembleRelease
 
-      - name: Verify APK contents
+      - name: Verify release APK signature and contents
         run: |
-          set "APK=android-source\app\build\outputs\apk\debug\app-debug.apk"
-          if not exist "%APK%" exit /b 41
-          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
-          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
-          tar -tf "%APK%" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
-          certutil -hashfile "%APK%" SHA256
-          for %%A in ("%APK%") do echo APK_SIZE=%%~zA
+          setlocal EnableDelayedExpansion
+          set "APK=android-source\app\build\outputs\apk\release\app-release.apk"
+          set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+          if not exist "!APK!" exit /b 41
+          tar -tf "!APK!" | findstr /x /c:"assets/rhwp-viewer/index.html" >nul || exit /b 42
+          tar -tf "!APK!" | findstr /x /c:"assets/rhwp-viewer/rhwp.js" >nul || exit /b 43
+          tar -tf "!APK!" | findstr /x /c:"assets/rhwp-viewer/rhwp_bg.wasm" >nul || exit /b 44
+          set "APKSIGNER="
+          for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" apksigner.bat 2^>nul') do set "APKSIGNER=%%F"
+          if not defined APKSIGNER exit /b 45
+          call "!APKSIGNER!" verify --verbose --print-certs "!APK!" || exit /b 46
+          certutil -hashfile "!APK!" SHA256
+          for %%A in ("!APK!") do echo APK_SIZE=%%~zA
+
+      - name: Publish signed release APK
+        run: |
+          if not exist downloads mkdir downloads
+          copy /y android-source\app\build\outputs\apk\release\app-release.apk downloads\all-documents-release.apk >nul
+          certutil -hashfile downloads\all-documents-release.apk SHA256 > downloads\all-documents-release.sha256.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads\all-documents-release.apk downloads\all-documents-release.sha256.txt
+          git diff --cached --quiet && exit /b 0
+          git commit -m "build: publish signed hardened release APK [skip ci]"
+          git push origin HEAD:main
