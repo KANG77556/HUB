@@ -25,12 +25,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Verify UI design contract
+        id: ui
         run: call android-source\scripts\test-ui-design.cmd
 
       - name: Verify security hardening contract
+        id: security
         run: call android-source\scripts\test-security-hardening.cmd
 
       - name: Prepare pinned portable JDK 17
+        id: jdk
         run: |
           set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
           if exist "%TOOLS%" rmdir /s /q "%TOOLS%"
@@ -42,6 +45,7 @@ jobs:
           "%TOOLS%\jdk\bin\java.exe" -version
 
       - name: Prepare pinned Gradle 8.10.2
+        id: gradle
         run: |
           set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
           curl.exe -k -L --fail --retry 3 -o "%TOOLS%\gradle.zip" "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip"
@@ -53,6 +57,7 @@ jobs:
           gradle --version
 
       - name: Vendor pinned RHWP runtime
+        id: rhwp
         run: |
           set "DEST=android-source\app\src\main\assets\rhwp-viewer"
           if not exist "%DEST%" mkdir "%DEST%"
@@ -74,6 +79,7 @@ jobs:
           copy /y "%RHWP_WASM%" "%DEST%\rhwp_bg.wasm" >nul
 
       - name: Prepare persistent release signing key
+        id: sign
         run: |
           setlocal EnableDelayedExpansion
           set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
@@ -98,15 +104,17 @@ jobs:
           echo ALLDOC_KEYSTORE_PASSWORD=!KS_PASS!>>"%GITHUB_ENV%"
           echo ALLDOC_KEY_ALIAS=alldocuments>>"%GITHUB_ENV%"
           echo ALLDOC_KEY_PASSWORD=!KS_PASS!>>"%GITHUB_ENV%"
-          keytool -list -v -keystore "!KEYFILE!" -storepass "!KS_PASS!" -alias alldocuments | findstr /i /c:"SHA256:" /c:"Valid from"
+          keytool -list -v -keystore "!KEYFILE!" -storepass "!KS_PASS!" -alias alldocuments
 
       - name: Verify internal-only viewer source
+        id: source
         run: |
           findstr /s /i /c:"ACTION_VIEW" android-source\app\src\main\java\*.kt >nul && exit /b 31 || ver >nul
           findstr /s /i /c:"외부 앱으로 열기" android-source\app\src\main\java\*.kt >nul && exit /b 32 || ver >nul
           findstr /i /c:"ViewerKind.OFFICE" android-source\app\src\main\java\kr\co\alldocuments\domain\DocumentViewerStrategy.kt >nul || exit /b 33
 
       - name: Build signed release APK
+        id: release_build
         run: |
           set "TOOLS=%RUNNER_TEMP%\hub-tools-main"
           set "JAVA_HOME=%TOOLS%\jdk"
@@ -117,6 +125,7 @@ jobs:
           gradle -p android-source --no-daemon assembleRelease
 
       - name: Verify release APK signature and contents
+        id: release_verify
         run: |
           setlocal EnableDelayedExpansion
           set "APK=android-source\app\build\outputs\apk\release\app-release.apk"
@@ -133,6 +142,7 @@ jobs:
           for %%A in ("!APK!") do echo APK_SIZE=%%~zA
 
       - name: Publish signed release APK
+        id: release_publish
         run: |
           if not exist downloads mkdir downloads
           copy /y android-source\app\build\outputs\apk\release\app-release.apk downloads\all-documents-release.apk >nul
@@ -142,4 +152,26 @@ jobs:
           git add downloads\all-documents-release.apk downloads\all-documents-release.sha256.txt
           git diff --cached --quiet && exit /b 0
           git commit -m "build: publish signed hardened release APK [skip ci]"
+          git push origin HEAD:main
+
+      - name: Persist failure diagnostic
+        if: failure()
+        run: |
+          if not exist diagnostics mkdir diagnostics
+          > diagnostics\all-documents-main-build.txt echo RUN_ID=${{ github.run_id }}
+          >> diagnostics\all-documents-main-build.txt echo COMMIT=${{ github.sha }}
+          >> diagnostics\all-documents-main-build.txt echo UI=${{ steps.ui.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo SECURITY=${{ steps.security.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo JDK=${{ steps.jdk.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo GRADLE=${{ steps.gradle.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo RHWP=${{ steps.rhwp.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo SIGN=${{ steps.sign.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo SOURCE=${{ steps.source.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo RELEASE_BUILD=${{ steps.release_build.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo RELEASE_VERIFY=${{ steps.release_verify.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo RELEASE_PUBLISH=${{ steps.release_publish.outcome }}
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostics\all-documents-main-build.txt
+          git commit -m "ci: record failed release build [skip ci]"
           git push origin HEAD:main
