@@ -36,11 +36,12 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
     val state: StateFlow<DocumentUiState> = _state.asStateFlow()
 
     fun addDocument(uri: Uri): DocumentItem? = runCatching {
+        val resolver = getApplication<Application>().contentResolver
         runCatching {
-            getApplication<Application>().contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
+            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
 
         val incoming = metadataReader.read(uri)
