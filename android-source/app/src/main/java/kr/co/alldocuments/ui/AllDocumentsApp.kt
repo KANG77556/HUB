@@ -32,27 +32,63 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kr.co.alldocuments.data.DocumentEditorRepository
 import kr.co.alldocuments.domain.DocumentItem
 import kr.co.alldocuments.domain.DocumentType
 
 @Composable
 fun AllDocumentsApp(viewModel: DocumentViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val editorRepository = remember(context) { DocumentEditorRepository(context.contentResolver) }
     var selectedDocument by remember { mutableStateOf<DocumentItem?>(null) }
+    var pendingSaveAs by remember { mutableStateOf<SaveAsRequest?>(null) }
+
+    val saveAsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        val request = pendingSaveAs
+        if (uri == null || request == null) {
+            pendingSaveAs = null
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                editorRepository.writeBytes(uri, request.bytes)
+            }
+            if (result.isSuccess) {
+                pendingSaveAs = null
+                viewModel.addDocument(uri)?.let { selectedDocument = viewModel.openDocument(it) }
+            }
+        }
+    }
 
     if (selectedDocument != null) {
-        DocumentViewer(item = selectedDocument!!, onBack = { selectedDocument = null })
+        DocumentViewer(
+            item = selectedDocument!!,
+            onBack = { selectedDocument = null },
+            onSaveAsRequest = { request ->
+                pendingSaveAs = request
+                saveAsLauncher.launch(request.fileName)
+            }
+        )
         return
     }
 
