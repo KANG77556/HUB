@@ -31,7 +31,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - name: Hash RHWP editor package and source archive
+      - name: Hash RHWP editor package
         run: |
           setlocal EnableDelayedExpansion
           set "TMP=%RUNNER_TEMP%\rhwp-editor-probe"
@@ -43,7 +43,4 @@ jobs:
           if not defined EDITOR_TGZ exit /b 31
           echo === RHWP_EDITOR_TGZ_SHA256 ===
           certutil -hashfile "!EDITOR_TGZ!" SHA256
-          set "SOURCE_URL=https://github.com/edwardkim/rhwp/archive/496333b27d21ddb9114ba9ae340bcb895870c9a7.zip"
-          curl.exe -k -L --fail --retry 3 -o "!TMP!\rhwp-source.zip" "!SOURCE_URL!"
-          echo === RHWP_SOURCE_ZIP_SHA256 ===
-          certutil -hashfile "!TMP!\rhwp-source.zip" SHA256
+          echo RHWP_STUDIO_COMMIT=496333b27d21ddb9114ba9ae340bcb895870c9a7
