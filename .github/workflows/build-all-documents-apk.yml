@@ -29,6 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify UI design contract
+        shell: cmd
+        run: call android-source\scripts\test-ui-design.cmd
+
       - name: Ensure portable Java 17
         run: |
           $ErrorActionPreference = 'Stop'
