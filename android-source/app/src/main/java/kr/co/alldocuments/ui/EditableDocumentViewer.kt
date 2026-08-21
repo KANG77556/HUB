@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -58,6 +59,7 @@ internal fun EditableDocumentViewer(
     var editorBase64 by remember(item.uri) { mutableStateOf<String?>(null) }
     var loadingEditor by remember(item.uri) { mutableStateOf(false) }
     var saving by remember(item.uri) { mutableStateOf(false) }
+    var showDiscardConfirm by remember(item.uri) { mutableStateOf(false) }
     var error by remember(item.uri) { mutableStateOf<String?>(null) }
 
     fun beginEdit() {
@@ -121,6 +123,25 @@ internal fun EditableDocumentViewer(
         }
     }
 
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text("편집 종료") },
+            text = { Text("저장하지 않은 변경사항이 있을 수 있습니다. 편집을 종료할까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDiscardConfirm = false
+                    editMode = false
+                    editorBase64 = null
+                    error = null
+                }) { Text("종료") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm = false }) { Text("계속 편집") }
+            }
+        )
+    }
+
     if (!editMode) {
         Box(Modifier.fillMaxSize()) {
             DocumentViewer(item = item, onBack = onBack, onSaveAsRequest = onSaveAsRequest)
@@ -165,7 +186,10 @@ internal fun EditableDocumentViewer(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { if (!saving) editMode = false }, enabled = !saving) {
+                TextButton(
+                    onClick = { if (!saving) showDiscardConfirm = true },
+                    enabled = !saving
+                ) {
                     Text("취소")
                 }
                 Text(
