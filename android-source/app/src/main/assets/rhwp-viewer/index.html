@@ -32,7 +32,8 @@ const viewer=document.getElementById('viewer');
 const measureCanvas=document.createElement('canvas');
 const measureContext=measureCanvas.getContext('2d');
 const FALLBACK_FONT='"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
-const BACKING_SCALE=2;
+const BACKING_SCALE=1.5;
+const MAX_RHWP_PAGES=80;
 let runtimeReady,activeDocument=null;
 function canvasFontForMeasurement(font){if(font&&String(font).trim())return font;return `10px ${FALLBACK_FONT}`;}
 globalThis.measureTextWidth=(font,text)=>{if(!measureContext)return 0;measureContext.font=canvasFontForMeasurement(font);return measureContext.measureText(text??'').width;};
@@ -41,7 +42,7 @@ async function ensureRuntime(){if(!runtimeReady)runtimeReady=init({module_or_pat
 function dispose(){if(activeDocument&&typeof activeDocument.free==='function')activeDocument.free();activeDocument=null;}
 function createCanvasPage(){const shell=document.createElement('section');shell.className='page-shell';const canvas=document.createElement('canvas');canvas.className='canvas-page';canvas.width=1;canvas.height=1;shell.appendChild(canvas);viewer.appendChild(shell);return canvas;}
 async function paintPage(pageIndex){const canvas=createCanvasPage();const result=activeDocument.renderPageToCanvas(pageIndex,canvas,BACKING_SCALE);if(result&&typeof result.then==='function')await result;if(canvas.width<=1||canvas.height<=1)throw new Error(`${pageIndex+1}쪽 Canvas 크기를 계산하지 못했습니다.`);canvas.style.aspectRatio=`${canvas.width} / ${canvas.height}`;canvas.style.width='100%';canvas.style.height='auto';await new Promise(resolve=>requestAnimationFrame(resolve));}
-async function renderDocument(base64){status.className='';status.textContent='문서를 불러오는 중입니다.';viewer.replaceChildren();try{await ensureRuntime();if(document.fonts?.ready)await document.fonts.ready;dispose();activeDocument=new HwpDocument(base64ToBytes(base64));const count=activeDocument.pageCount();if(!Number.isFinite(count)||count<1)throw new Error('표시할 페이지가 없습니다.');for(let i=0;i<count;i++){status.textContent=`문서를 표시하는 중입니다. ${i+1}/${count}`;await paintPage(i);}status.textContent='';status.className='ready';}catch(error){status.className='error';status.textContent=`HWP/HWPX 문서를 표시할 수 없습니다.\n${error?.message||error}`;viewer.replaceChildren();}}
+async function renderDocument(base64){status.className='';status.textContent='문서를 불러오는 중입니다.';viewer.replaceChildren();try{await ensureRuntime();if(document.fonts?.ready)await document.fonts.ready;dispose();activeDocument=new HwpDocument(base64ToBytes(base64));const count=activeDocument.pageCount();if(!Number.isFinite(count)||count<1)throw new Error('표시할 페이지가 없습니다.');if(count>MAX_RHWP_PAGES)throw new Error(`보안을 위해 HWP/HWPX는 최대 ${MAX_RHWP_PAGES}쪽까지 열 수 있습니다.`);for(let i=0;i<count;i++){status.textContent=`문서를 표시하는 중입니다. ${i+1}/${count}`;await paintPage(i);}status.textContent='';status.className='ready';}catch(error){dispose();status.className='error';status.textContent=`HWP/HWPX 문서를 표시할 수 없습니다.\n${error?.message||error}`;viewer.replaceChildren();}}
 window.openRhwpFromBase64=renderDocument;window.addEventListener('beforeunload',dispose);status.textContent='문서를 기다리고 있습니다.';
 </script>
 </body>
