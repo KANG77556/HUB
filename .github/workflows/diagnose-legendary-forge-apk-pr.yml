@@ -84,16 +84,18 @@ jobs:
           if not defined APKSIGNER exit /b 42
           call "!APKSIGNER!" verify --verbose --print-certs "!APK!" || exit /b 43
           set "AAPT="
-          for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" aapt.exe 2^>nul') do set "AAPT=%%F"
+          for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" aapt.exe 2^>nul') do if not defined AAPT set "AAPT=%%F"
           if not defined AAPT exit /b 44
-          for /f "delims=" %%L in ('"!AAPT!" dump badging "!APK!" ^| findstr /b "package:"') do set "PKG=%%L"
+          "!AAPT!" dump badging "!APK!" > "%RUNNER_TEMP%\legendary-forge-badging.txt" || exit /b 45
+          findstr /b "package:" "%RUNNER_TEMP%\legendary-forge-badging.txt" > "%RUNNER_TEMP%\legendary-forge-package.txt" || exit /b 46
+          set /p PKG=<"%RUNNER_TEMP%\legendary-forge-package.txt"
           echo PACKAGE_BADGING=!PKG!
-          echo(!PKG!| findstr /c:"name='com.seongho.legendaryforge'" >nul || exit /b 45
-          echo(!PKG!| findstr /c:"versionCode='3'" >nul || exit /b 46
-          echo(!PKG!| findstr /c:"versionName='0.2.0'" >nul || exit /b 47
+          echo(!PKG!| findstr /c:"name='com.seongho.legendaryforge'" >nul || exit /b 47
+          echo(!PKG!| findstr /c:"versionCode='3'" >nul || exit /b 48
+          echo(!PKG!| findstr /c:"versionName='0.2.0'" >nul || exit /b 49
           if not exist legendary-forge-apk\dist mkdir legendary-forge-apk\dist
           copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk >nul
-          powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Length)"
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Length)"
 
       - name: Publish verified APK to build branch
         run: |
