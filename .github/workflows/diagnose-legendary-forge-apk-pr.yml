@@ -5,10 +5,13 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-legendary-forge-apk-pr.yml'
-      - 'legendary-forge-apk/**'
+      - 'legendary-forge-apk/settings.gradle'
+      - 'legendary-forge-apk/build.gradle'
+      - 'legendary-forge-apk/app/build.gradle'
+      - 'legendary-forge-apk/app/src/main/**'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: legendary-forge-apk-pr-${{ github.event.pull_request.number }}
@@ -29,7 +32,6 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='legendary-forge-apk\app\src\main\assets\index.html'; if(-not (Test-Path -LiteralPath $p)){throw 'embedded game asset missing'}; $html=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); if($html.Length -lt 5000){throw 'embedded game asset too small'}; if(-not $html.Contains('legendary-forge-apk-v1')){throw 'game save marker missing'}; Write-Host ('ASSET_SHA256=' + (Get-FileHash -Algorithm SHA256 $p).Hash); Write-Host ('ASSET_BYTES=' + (Get-Item $p).Length)"
 
       - name: Prepare pinned portable JDK 17
-        id: jdk
         run: |
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
           if exist "%TOOLS%" rmdir /s /q "%TOOLS%"
@@ -41,7 +43,6 @@ jobs:
           "%TOOLS%\jdk\bin\java.exe" -version
 
       - name: Prepare pinned Gradle 8.10.2
-        id: gradle
         run: |
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
           curl.exe -k -L --fail --retry 3 -o "%TOOLS%\gradle.zip" "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip"
@@ -53,7 +54,6 @@ jobs:
           gradle --version
 
       - name: Build installable debug APK
-        id: apk_build
         run: |
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
           set "JAVA_HOME=%TOOLS%\jdk"
@@ -65,7 +65,6 @@ jobs:
           gradle -p legendary-forge-apk --no-daemon assembleDebug
 
       - name: Verify APK signature and package
-        id: verify
         run: |
           setlocal EnableDelayedExpansion
           set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
@@ -82,11 +81,13 @@ jobs:
           copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-debug.apk >nul
           powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Length)"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: LegendaryForge-debug-apk
-          path: |
-            legendary-forge-apk/dist/LegendaryForge-debug.apk
-            legendary-forge-apk/dist/LegendaryForge-debug.sha256.txt
-          retention-days: 7
+      - name: Publish verified APK to build branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin ci/legendary-forge-apk-20260821
+          git checkout -B ci/legendary-forge-apk-20260821 origin/ci/legendary-forge-apk-20260821
+          git add -f legendary-forge-apk\dist\LegendaryForge-debug.apk legendary-forge-apk\dist\LegendaryForge-debug.sha256.txt
+          git diff --cached --quiet && exit /b 0
+          git commit -m "build: publish verified Legendary Forge APK [skip ci]"
+          git push origin HEAD:ci/legendary-forge-apk-20260821
