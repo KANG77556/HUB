@@ -13,9 +13,9 @@ findstr /c:"fun writeBytes(uri: Uri, bytes: ByteArray): Result<Unit>" "%SRC%\dat
 findstr /c:"fun readBytes(uri: Uri, maxBytes: Int): Result<ByteArray>" "%SRC%\data\DocumentEditorRepository.kt" >nul || exit /b 107
 
 findstr /c:"TextDocumentEditor" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 111
-findstr /c:"\"편집\"" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 112
-findstr /c:"\"저장\"" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 113
-findstr /c:"\"취소\"" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 114
+findstr /c:"EDIT_LABEL" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 112
+findstr /c:"SAVE_LABEL" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 113
+findstr /c:"CANCEL_LABEL" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 114
 findstr /c:"SaveAsRequest" "%SRC%\ui\DocumentViewer.kt" >nul || exit /b 115
 findstr /c:"ActivityResultContracts.CreateDocument" "%SRC%\ui\AllDocumentsApp.kt" >nul || exit /b 116
 findstr /c:"Intent.FLAG_GRANT_WRITE_URI_PERMISSION" "%SRC%\ui\DocumentViewModel.kt" >nul || exit /b 117
