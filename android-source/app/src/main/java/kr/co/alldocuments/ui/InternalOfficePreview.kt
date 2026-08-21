@@ -34,17 +34,22 @@ internal fun loadOfficePreview(resolver: ContentResolver, uri: Uri, name: String
     }
 
     val entries = mutableMapOf<String, ByteArray>()
-    var totalUncompressed = 0
+    var retainedBytes = 0
+    var declaredUncompressed = 0L
     var entryCount = 0
     ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
         while (true) {
             val entry = zip.nextEntry ?: break
             entryCount += 1
             require(entryCount <= MAX_OFFICE_ENTRIES) { "문서 내부 파일 수가 허용 한도를 초과합니다." }
-            if (!entry.isDirectory) {
+            if (entry.size > 0) {
+                declaredUncompressed += entry.size
+                require(declaredUncompressed <= MAX_OFFICE_UNCOMPRESSED_BYTES) { "문서 압축 해제 크기가 허용 한도를 초과합니다." }
+            }
+            if (!entry.isDirectory && shouldRetainEntry(ext, entry.name)) {
                 val entryBytes = readLimitedBytes(zip, MAX_OFFICE_ENTRY_BYTES)
-                totalUncompressed += entryBytes.size
-                require(totalUncompressed <= MAX_OFFICE_UNCOMPRESSED_BYTES) { "문서 압축 해제 크기가 허용 한도를 초과합니다." }
+                retainedBytes += entryBytes.size
+                require(retainedBytes <= MAX_OFFICE_UNCOMPRESSED_BYTES) { "문서 처리 크기가 허용 한도를 초과합니다." }
                 entries[entry.name] = entryBytes
             }
             zip.closeEntry()
@@ -72,6 +77,13 @@ internal fun loadOfficePreview(resolver: ContentResolver, uri: Uri, name: String
     return OfficePreview(sections.ifEmpty { listOf("문서에서 표시할 텍스트를 찾지 못했습니다.") })
 }
 
+private fun shouldRetainEntry(ext: String, entryName: String): Boolean = when (ext) {
+    "docx" -> entryName == "word/document.xml"
+    "xlsx" -> entryName == "xl/sharedStrings.xml" || (entryName.startsWith("xl/worksheets/sheet") && entryName.endsWith(".xml"))
+    "pptx" -> entryName.startsWith("ppt/slides/slide") && entryName.endsWith(".xml")
+    else -> false
+}
+
 private fun extractXmlText(bytes: ByteArray): String {
     val factory = DocumentBuilderFactory.newInstance().apply {
         isNamespaceAware = true
@@ -81,8 +93,8 @@ private fun extractXmlText(bytes: ByteArray): String {
         setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
         setFeature("http://xml.org/sax/features/external-general-entities", false)
         setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-        setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-        setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+        runCatching { setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "") }
+        runCatching { setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "") }
     }
     val document = factory.newDocumentBuilder().parse(ByteArrayInputStream(bytes))
     val out = StringBuilder()
