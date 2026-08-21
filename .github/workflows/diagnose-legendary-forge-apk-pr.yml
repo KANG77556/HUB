@@ -1,0 +1,89 @@
+name: Diagnose Legendary Forge APK PR
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-legendary-forge-apk-pr.yml'
+      - 'legendary-forge-apk/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legendary-forge-apk-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import game HTML from Google Drive
+        id: game_asset
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$candidates=@('G:\내 드라이브\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone.html','G:\My Drive\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone.html'); $src=$candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if(-not $src -and (Test-Path -LiteralPath 'G:\내 드라이브')) { $src=Get-ChildItem -LiteralPath 'G:\내 드라이브' -Filter 'LegendaryForge_Standalone.html' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }; if(-not $src){ throw 'LegendaryForge_Standalone.html not found in Google Drive sync' }; $dest='legendary-forge-apk\app\src\main\assets\index.html'; New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null; $html=[IO.File]::ReadAllText($src,[Text.Encoding]::UTF8).Replace('<script type=\"module\">','<script>'); [IO.File]::WriteAllText($dest,$html,(New-Object Text.UTF8Encoding($false))); Write-Host ('SOURCE=' + $src); Write-Host ('ASSET_SHA256=' + (Get-FileHash -Algorithm SHA256 $dest).Hash); Write-Host ('ASSET_BYTES=' + (Get-Item $dest).Length)"
+
+      - name: Prepare pinned portable JDK 17
+        id: jdk
+        run: |
+          set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
+          if exist "%TOOLS%" rmdir /s /q "%TOOLS%"
+          mkdir "%TOOLS%"
+          curl.exe -k -L --fail --retry 3 -o "%TOOLS%\jdk.zip" "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20+8/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20_8.zip"
+          certutil -hashfile "%TOOLS%\jdk.zip" SHA256 | findstr /i "418497be5cf585bdd2203d6486a565d66d3f5e992d5630d45104cb873fab8122" >nul || exit /b 11
+          mkdir "%TOOLS%\jdk"
+          tar -xf "%TOOLS%\jdk.zip" -C "%TOOLS%\jdk" --strip-components=1
+          "%TOOLS%\jdk\bin\java.exe" -version
+
+      - name: Prepare pinned Gradle 8.10.2
+        id: gradle
+        run: |
+          set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
+          curl.exe -k -L --fail --retry 3 -o "%TOOLS%\gradle.zip" "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip"
+          certutil -hashfile "%TOOLS%\gradle.zip" SHA256 | findstr /i "31c55713e40233a8303827ceb42ca48a47267a0ad4bab9177123121e71524c26" >nul || exit /b 12
+          mkdir "%TOOLS%\gradle"
+          tar -xf "%TOOLS%\gradle.zip" -C "%TOOLS%\gradle" --strip-components=1
+          set "JAVA_HOME=%TOOLS%\jdk"
+          set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%PATH%"
+          gradle --version
+
+      - name: Build installable debug APK
+        id: apk_build
+        run: |
+          set "TOOLS=%RUNNER_TEMP%\legendary-forge-tools-pr"
+          set "JAVA_HOME=%TOOLS%\jdk"
+          set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+          set "ANDROID_SDK_ROOT=%LOCALAPPDATA%\Android\Sdk"
+          set "PATH=%JAVA_HOME%\bin;%TOOLS%\gradle\bin;%ANDROID_HOME%\platform-tools;%PATH%"
+          set "GRADLE_OPTS=-Djavax.net.ssl.trustStoreType=Windows-ROOT -Dorg.gradle.daemon=false"
+          if not exist "%ANDROID_HOME%\platforms\android-35\android.jar" exit /b 31
+          gradle -p legendary-forge-apk --no-daemon assembleDebug
+
+      - name: Verify APK signature and package
+        id: verify
+        run: |
+          setlocal EnableDelayedExpansion
+          set "APK=legendary-forge-apk\app\build\outputs\apk\debug\app-debug.apk"
+          set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+          if not exist "!APK!" exit /b 41
+          set "APKSIGNER="
+          for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" apksigner.bat 2^>nul') do set "APKSIGNER=%%F"
+          if not defined APKSIGNER exit /b 42
+          call "!APKSIGNER!" verify --verbose --print-certs "!APK!" || exit /b 43
+          if not exist legendary-forge-apk\dist mkdir legendary-forge-apk\dist
+          copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-debug.apk >nul
+          powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-debug.apk').Length)"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LegendaryForge-debug-apk
+          path: |
+            legendary-forge-apk/dist/LegendaryForge-debug.apk
+            legendary-forge-apk/dist/LegendaryForge-debug.sha256.txt
+          retention-days: 7
