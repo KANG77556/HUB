@@ -9,7 +9,7 @@ on:
       - 'legendary-forge-apk/build.gradle'
       - 'legendary-forge-apk/app/build.gradle'
       - 'legendary-forge-apk/app/src/main/**'
-      - 'legendary-forge-apk/v020-bundle/**'
+      - 'legendary-forge-apk/v021-bundle/**'
 
 permissions:
   contents: write
@@ -27,15 +27,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore and verify v0.2.0 embedded game asset
+      - name: Restore and verify v0.2.1 embedded game asset
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='legendary-forge-apk\v020-bundle'; $p1=[IO.File]::ReadAllText((Join-Path $root 'part-01.b64'),[Text.Encoding]::ASCII); $p2a1=[IO.File]::ReadAllText((Join-Path $root 'part-02a1.b64'),[Text.Encoding]::ASCII); $p2a2=[IO.File]::ReadAllText((Join-Path $root 'part-02a2.b64'),[Text.Encoding]::ASCII); $p2b=[IO.File]::ReadAllText((Join-Path $root 'part-02b.b64'),[Text.Encoding]::ASCII); $p3=[IO.File]::ReadAllText((Join-Path $root 'part-03.b64'),[Text.Encoding]::ASCII); $b64=$p1+$p2a1+$p2a2+$p2b+$p3; if($b64.Length -ne 24364){throw ('bundle length mismatch: '+$b64.Length)}; $gzBytes=[Convert]::FromBase64String($b64); $input=New-Object IO.MemoryStream(,$gzBytes); $gzip=New-Object IO.Compression.GzipStream($input,[IO.Compression.CompressionMode]::Decompress); $output=New-Object IO.MemoryStream; $gzip.CopyTo($output); $gzip.Dispose(); $input.Dispose(); $asset='legendary-forge-apk\app\src\main\assets\index.html'; [IO.File]::WriteAllBytes($asset,$output.ToArray()); $output.Dispose(); $hash=(Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower(); if($hash -ne 'ce107df700e580334c3c8b1e307ebfa85c32744a372d30c107cf74e3f5c249d5'){throw ('asset sha mismatch: '+$hash)}; $html=[IO.File]::ReadAllText($asset,[Text.Encoding]::UTF8); if(-not $html.Contains('legendary-forge-apk-v2')){throw 'v2 save marker missing'}; Write-Host ('ASSET_SHA256='+$hash); Write-Host ('ASSET_BYTES='+(Get-Item $asset).Length)"
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='legendary-forge-apk\v021-bundle'; $parts=1..5 | ForEach-Object { [IO.File]::ReadAllText((Join-Path $root ('part-{0:D2}.b64' -f $_)),[Text.Encoding]::ASCII) }; $b64=[String]::Concat($parts); if($b64.Length -ne 25424){throw ('bundle length mismatch: '+$b64.Length)}; $gzBytes=[Convert]::FromBase64String($b64); $input=New-Object IO.MemoryStream(,$gzBytes); $gzip=New-Object IO.Compression.GzipStream($input,[IO.Compression.CompressionMode]::Decompress); $output=New-Object IO.MemoryStream; $gzip.CopyTo($output); $gzip.Dispose(); $input.Dispose(); $asset='legendary-forge-apk\app\src\main\assets\index.html'; [IO.File]::WriteAllBytes($asset,$output.ToArray()); $output.Dispose(); $hash=(Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower(); if($hash -ne 'c8e42731e2b352907e294dfbb6c7e1bf60d1190202455f60a76aeca84d5ba4b6'){throw ('asset sha mismatch: '+$hash)}; $html=[IO.File]::ReadAllText($asset,[Text.Encoding]::UTF8); if(-not $html.Contains('legendary-forge-apk-v2')){throw 'v2 save marker missing'}; Write-Host ('ASSET_SHA256='+$hash); Write-Host ('ASSET_BYTES='+(Get-Item $asset).Length)"
 
       - name: Verify Android version contract
         run: |
           findstr /c:"applicationId 'com.seongho.legendaryforge'" legendary-forge-apk\app\build.gradle >nul || exit /b 21
-          findstr /c:"versionCode 3" legendary-forge-apk\app\build.gradle >nul || exit /b 22
-          findstr /c:"versionName '0.2.0'" legendary-forge-apk\app\build.gradle >nul || exit /b 23
+          findstr /c:"versionCode 4" legendary-forge-apk\app\build.gradle >nul || exit /b 22
+          findstr /c:"versionName '0.2.1'" legendary-forge-apk\app\build.gradle >nul || exit /b 23
 
       - name: Prepare pinned portable JDK 17
         run: |
@@ -91,11 +91,11 @@ jobs:
           set /p PKG=<"%RUNNER_TEMP%\legendary-forge-package.txt"
           echo PACKAGE_BADGING=!PKG!
           echo(!PKG!| findstr /c:"name='com.seongho.legendaryforge'" >nul || exit /b 47
-          echo(!PKG!| findstr /c:"versionCode='3'" >nul || exit /b 48
-          echo(!PKG!| findstr /c:"versionName='0.2.0'" >nul || exit /b 49
+          echo(!PKG!| findstr /c:"versionCode='4'" >nul || exit /b 48
+          echo(!PKG!| findstr /c:"versionName='0.2.1'" >nul || exit /b 49
           if not exist legendary-forge-apk\dist mkdir legendary-forge-apk\dist
-          copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk >nul
-          powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk').Length)"
+          copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.apk >nul
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.apk').Length)"
 
       - name: Publish verified APK to build branch
         run: |
@@ -103,7 +103,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin ci/legendary-forge-apk-20260821
           git checkout -B ci/legendary-forge-apk-20260821 origin/ci/legendary-forge-apk-20260821
-          git add -f legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.apk legendary-forge-apk\dist\LegendaryForge-0.2.0-debug.sha256.txt
+          git add -f legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.apk legendary-forge-apk\dist\LegendaryForge-0.2.1-debug.sha256.txt
           git diff --cached --quiet && exit /b 0
-          git commit -m "build: publish verified Legendary Forge 0.2.0 APK [skip ci]"
+          git commit -m "build: publish verified Legendary Forge 0.2.1 APK [skip ci]"
           git push origin HEAD:ci/legendary-forge-apk-20260821
