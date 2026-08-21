@@ -5,9 +5,7 @@ on:
     branches: [ci/legendary-forge-apk-20260821]
     paths:
       - '.github/workflows/build-legendary-forge-apk.yml'
-      - 'legendary-forge-apk/settings.gradle'
-      - 'legendary-forge-apk/build.gradle'
-      - 'legendary-forge-apk/app/**'
+      - 'legendary-forge-apk/v030-bundle/**'
   workflow_dispatch:
 
 permissions:
@@ -26,9 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Import verified v0.3.0 game HTML from Google Drive
+      - name: Reconstruct verified v0.3.0 Android source
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -Command "$candidates=@('G:\내 드라이브\04_게임개발\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone_v0.3.0.html','G:\My Drive\04_게임개발\전설의 대장간_방치형게임_MVP_20260821\02_Web_PWA\LegendaryForge_Standalone_v0.3.0.html'); $src=$candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if(-not $src -and (Test-Path -LiteralPath 'G:\내 드라이브')) { $src=Get-ChildItem -LiteralPath 'G:\내 드라이브' -Filter 'LegendaryForge_Standalone_v0.3.0.html' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }; if(-not $src){ throw 'LegendaryForge_Standalone_v0.3.0.html not found in Google Drive sync' }; $dest='legendary-forge-apk\app\src\main\assets\index.html'; New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null; $html=[IO.File]::ReadAllText($src,[Text.Encoding]::UTF8); [IO.File]::WriteAllText($dest,$html,(New-Object Text.UTF8Encoding($false))); $sha=(Get-FileHash -Algorithm SHA256 $dest).Hash.ToLower(); if($sha -ne 'c0d392c59b4f54c78b70ed99977b7328a60d8f6238e662dd1f1644cc3945a52d'){ throw ('Unexpected HTML SHA256: '+$sha) }; Write-Host ('SOURCE=' + $src); Write-Host ('ASSET_SHA256=' + $sha); Write-Host ('ASSET_BYTES=' + (Get-Item $dest).Length)"
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$parts=Get-ChildItem -LiteralPath 'legendary-forge-apk\v030-bundle' -Filter 'part-*.b64' -File | Sort-Object Name; if($parts.Count -ne 8){ throw ('Expected 8 bundle parts, found '+$parts.Count) }; $b64=($parts | ForEach-Object { [IO.File]::ReadAllText($_.FullName,[Text.Encoding]::ASCII) }) -join ''; $archive=Join-Path $env:RUNNER_TEMP 'legendary-forge-v030.tar.gz'; [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64)); $archiveSha=(Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower(); if($archiveSha -ne '7364946d44bad3ff9a40e2afce336364833b1ffdad1fd2e6658c22be8e627040'){ throw ('Unexpected source bundle SHA256: '+$archiveSha) }; tar -xzf $archive -C 'legendary-forge-apk'; if($LASTEXITCODE -ne 0){ throw ('tar extraction failed: '+$LASTEXITCODE) }; $asset='legendary-forge-apk\app\src\main\assets\index.html'; $assetSha=(Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower(); if($assetSha -ne 'c0d392c59b4f54c78b70ed99977b7328a60d8f6238e662dd1f1644cc3945a52d'){ throw ('Unexpected HTML SHA256: '+$assetSha) }; $gradle=[IO.File]::ReadAllText('legendary-forge-apk\app\build.gradle'); if($gradle -notmatch 'versionCode 5' -or $gradle -notmatch "versionName '0.3.0'"){ throw 'Android version contract mismatch' }; Write-Host ('SOURCE_BUNDLE_SHA256=' + $archiveSha); Write-Host ('ASSET_SHA256=' + $assetSha); Write-Host ('ASSET_BYTES=' + (Get-Item $asset).Length)"
 
       - name: Prepare pinned portable JDK 17
         run: |
@@ -75,11 +73,15 @@ jobs:
           for /f "delims=" %%F in ('where /r "!ANDROID_HOME!\build-tools" aapt.exe 2^>nul') do set "AAPT=%%F"
           if not defined APKSIGNER exit /b 42
           if not defined AAPT exit /b 44
-          call "!APKSIGNER!" verify --verbose --print-certs "!APK!" || exit /b 43
+          call "!APKSIGNER!" verify --verbose --print-certs "!APK!" > "%RUNNER_TEMP%\lf-apksigner.txt" || exit /b 43
+          type "%RUNNER_TEMP%\lf-apksigner.txt"
+          findstr /i /c:"Verified using v2 scheme (APK Signature Scheme v2): true" "%RUNNER_TEMP%\lf-apksigner.txt" >nul || exit /b 46
+          findstr /i "e460258371dcba53ffe9d56c2d239fc321f153795a6de1bb79e0b5d560187cdb" "%RUNNER_TEMP%\lf-apksigner.txt" >nul || exit /b 47
           "!AAPT!" dump badging "!APK!" | findstr /c:"package: name='com.seongho.legendaryforge' versionCode='5' versionName='0.3.0'" >nul || exit /b 45
           if exist "%RUNNER_TEMP%\lf-apk-check" rmdir /s /q "%RUNNER_TEMP%\lf-apk-check"
           mkdir "%RUNNER_TEMP%\lf-apk-check"
-          powershell -NoProfile -Command "Expand-Archive -LiteralPath '!APK!' -DestinationPath '%RUNNER_TEMP%\lf-apk-check'; $asset='%RUNNER_TEMP%\lf-apk-check\assets\index.html'; $sha=(Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower(); if($sha -ne 'c0d392c59b4f54c78b70ed99977b7328a60d8f6238e662dd1f1644cc3945a52d'){ throw ('Embedded asset SHA mismatch: '+$sha) }; Write-Host ('EMBEDDED_ASSET_SHA256=' + $sha)"
+          tar -xf "!APK!" -C "%RUNNER_TEMP%\lf-apk-check" || exit /b 48
+          powershell -NoProfile -Command "$asset='%RUNNER_TEMP%\lf-apk-check\assets\index.html'; $sha=(Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower(); if($sha -ne 'c0d392c59b4f54c78b70ed99977b7328a60d8f6238e662dd1f1644cc3945a52d'){ throw ('Embedded asset SHA mismatch: '+$sha) }; Write-Host ('EMBEDDED_ASSET_SHA256=' + $sha)"
           if not exist legendary-forge-apk\dist mkdir legendary-forge-apk\dist
           copy /y "!APK!" legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.apk >nul
           powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 'legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.apk').Hash.ToLower(); Set-Content -Encoding ASCII 'legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.sha256.txt' $h; Write-Host ('APK_SHA256=' + $h); Write-Host ('APK_BYTES=' + (Get-Item 'legendary-forge-apk\dist\LegendaryForge-0.3.0-debug.apk').Length)"
