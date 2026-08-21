@@ -11,6 +11,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -38,7 +40,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Bitmap as ComposeBitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -55,7 +60,7 @@ import kr.co.alldocuments.domain.DocumentItem
 import kr.co.alldocuments.domain.DocumentViewerStrategy
 import kr.co.alldocuments.domain.ViewerKind
 
-private const val VIEWER_TOP_BAR_HEIGHT_DP = 52
+private const val VIEWER_TOP_BAR_HEIGHT_DP = 48
 
 private sealed interface ViewerState {
     data object Loading : ViewerState
@@ -80,23 +85,23 @@ fun DocumentViewer(item: DocumentItem, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Color(0xFFEDEFF2))) {
+    Column(Modifier.fillMaxSize().background(Color(0xFFE9EBEF))) {
         ViewerTopBar(fileName = item.name, onBack = onBack)
-        HorizontalDivider(color = Color(0xFFE5E7EB), thickness = 1.dp)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
         Box(
-            Modifier.fillMaxSize().background(Color(0xFFEDEFF2)),
+            Modifier.fillMaxSize().background(Color(0xFFE9EBEF)),
             contentAlignment = Alignment.Center
         ) {
             when (val current = state) {
-                ViewerState.Loading -> CircularProgressIndicator()
+                ViewerState.Loading -> CircularProgressIndicator(strokeWidth = 2.5.dp)
                 is ViewerState.Error -> Text(current.message, Modifier.padding(20.dp))
                 is ViewerState.TextContent -> LazyColumn(
-                    Modifier.fillMaxSize().background(Color.White).padding(horizontal = 18.dp, vertical = 14.dp)
-                ) { item { Text(current.text) } }
+                    Modifier.fillMaxSize().background(Color.White).padding(horizontal = 18.dp, vertical = 16.dp)
+                ) { item { Text(current.text, style = MaterialTheme.typography.bodyMedium) } }
                 is ViewerState.ImageContent -> Image(
                     current.bitmap.asImageBitmap(),
                     item.name,
-                    Modifier.fillMaxSize().padding(4.dp),
+                    Modifier.fillMaxSize().padding(6.dp),
                     contentScale = ContentScale.Fit
                 )
                 is ViewerState.Rhwp -> RhwpWebView(current.base64)
@@ -110,7 +115,7 @@ fun DocumentViewer(item: DocumentItem, onBack: () -> Unit) {
                             Text(
                                 "${index + 1} / ${current.pages.size}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF6B7280),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 3.dp)
                             )
                             Image(
@@ -129,18 +134,13 @@ fun DocumentViewer(item: DocumentItem, onBack: () -> Unit) {
 
 @Composable
 private fun ViewerTopBar(fileName: String, onBack: () -> Unit) {
-    Surface(color = Color(0xFFF9FAFB), shadowElevation = 0.dp) {
+    Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 0.dp) {
         Row(
             Modifier.fillMaxWidth().height(VIEWER_TOP_BAR_HEIGHT_DP.dp).padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Text(
-                    "‹",
-                    modifier = Modifier.semantics { contentDescription = "뒤로" },
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color(0xFF374151)
-                )
+                BackChevron()
             }
             Text(
                 fileName,
@@ -149,9 +149,37 @@ private fun ViewerTopBar(fileName: String, onBack: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
+    }
+}
+
+@Composable
+private fun BackChevron() {
+    Canvas(
+        modifier = Modifier.size(22.dp).semantics { contentDescription = "뒤로" }
+    ) {
+        val stroke = 2.dp.toPx()
+        val xRight = size.width * 0.64f
+        val xLeft = size.width * 0.36f
+        val yTop = size.height * 0.25f
+        val yMid = size.height * 0.5f
+        val yBottom = size.height * 0.75f
+        drawLine(
+            color = Color(0xFF374151),
+            start = Offset(xRight, yTop),
+            end = Offset(xLeft, yMid),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = Color(0xFF374151),
+            start = Offset(xLeft, yMid),
+            end = Offset(xRight, yBottom),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
     }
 }
 
