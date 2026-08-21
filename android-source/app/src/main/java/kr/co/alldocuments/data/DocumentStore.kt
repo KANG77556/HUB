@@ -11,7 +11,7 @@ class DocumentStore(context: Context) {
 
     fun load(): List<DocumentItem> = prefs.getStringSet(KEY_ITEMS, emptySet()).orEmpty()
         .mapNotNull(::decode)
-        .sortedByDescending { it.addedAt }
+        .sortedByDescending { it.lastOpenedAt }
 
     fun save(items: List<DocumentItem>) {
         prefs.edit().putStringSet(KEY_ITEMS, items.map(::encode).toSet()).apply()
@@ -24,19 +24,22 @@ class DocumentStore(context: Context) {
         item.mimeType.orEmpty(),
         item.type.name,
         item.addedAt.toString(),
-        item.isFavorite.toString()
+        item.isFavorite.toString(),
+        item.lastOpenedAt.toString()
     ).joinToString("|") { URLEncoder.encode(it, Charsets.UTF_8.name()) }
 
     private fun decode(value: String): DocumentItem? = runCatching {
         val parts = value.split('|').map { URLDecoder.decode(it, Charsets.UTF_8.name()) }
+        val addedAt = parts[5].toLong()
         DocumentItem(
             id = parts[0],
             name = parts[1],
             uri = parts[2],
             mimeType = parts[3].ifBlank { null },
             type = DocumentType.valueOf(parts[4]),
-            addedAt = parts[5].toLong(),
-            isFavorite = parts[6].toBoolean()
+            addedAt = addedAt,
+            isFavorite = parts[6].toBoolean(),
+            lastOpenedAt = parts.getOrNull(7)?.toLongOrNull() ?: addedAt
         )
     }.getOrNull()
 
