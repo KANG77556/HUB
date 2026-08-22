@@ -1,0 +1,1 @@
+Trigger Legendary Forge v0.3.0 verified build after self-hosted runner restart.
