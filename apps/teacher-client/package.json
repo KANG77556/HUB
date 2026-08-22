@@ -1,0 +1,44 @@
+{
+  "name": "schoolworkhub-teacher-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/electron/main/index.js",
+  "scripts": {
+    "build": "npm run build:electron && npm run build:renderer",
+    "build:electron": "tsc -p tsconfig.main.json && npm run build:preload",
+    "build:preload": "vite build --config vite.preload.config.ts && node scripts/verify-preload-bundle.mjs",
+    "build:renderer": "vite build",
+    "lint": "eslint src vite.config.ts vite.preload.config.ts vitest.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "rebuild:native": "electron-rebuild -f -w @github/keytar -w better-sqlite3",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@github/keytar": "7.10.6",
+    "better-sqlite3": "13.0.1",
+    "electron": "43.2.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "4.2.0",
+    "@eslint/js": "9.39.2",
+    "@testing-library/jest-dom": "6.8.0",
+    "@testing-library/react": "16.3.0",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "24.1.0",
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
+    "@vitejs/plugin-react": "4.3.4",
+    "eslint": "9.39.2",
+    "jsdom": "26.1.0",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.46.1",
+    "vite": "6.1.0",
+    "vitest": "4.1.10"
+  }
+}
