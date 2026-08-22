@@ -105,3 +105,4 @@ jobs:
           retention-days: 7
 
 # trigger v0.3.0 verified build
+# retrigger after runner online 2026-08-22 09:44 KST
