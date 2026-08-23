@@ -15,7 +15,6 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
-import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 
 private const val MAX_OFFICE_FILE_BYTES = 50 * 1024 * 1024
@@ -88,9 +87,7 @@ private fun shouldRetainEntry(ext: String, entryName: String): Boolean = when (e
 private fun extractXmlText(bytes: ByteArray): String {
     val factory = DocumentBuilderFactory.newInstance().apply {
         isNamespaceAware = true
-        isXIncludeAware = false
         setExpandEntityReferences(false)
-        setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
         setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
         setFeature("http://xml.org/sax/features/external-general-entities", false)
         setFeature("http://xml.org/sax/features/external-parameter-entities", false)
