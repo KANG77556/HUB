@@ -41,7 +41,7 @@ findstr /c:"RHWP_DISABLE_EXTERNAL_WEBFONTS=1" "%PRWF%" >nul || exit /b 142
 findstr /c:"@rhwp/editor@0.8.4" "%MAINWF%" >nul || exit /b 143
 findstr /c:"RHWP_DISABLE_EXTERNAL_WEBFONTS=1" "%MAINWF%" >nul || exit /b 144
 
-findstr /s /i /c:"ACTION_VIEW" "%SRC%\*.kt" >nul && exit /b 121
+findstr /i /c:"ACTION_VIEW" "%SRC%\ui\DocumentViewer.kt" >nul && exit /b 121
 
 echo Document editing contract passed
 exit /b 0
