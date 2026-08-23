@@ -1,3 +1,3 @@
 SHA256의 downloads\all-documents-release.apk 해시:
-ebeb3c9a3ee40e25bd7dbd3790c320a8448c1566e4ca0a62f167b9ed30b07645
+a01d0caf61200a3120f28a773233b05176069cc80013f1e47d03318563fe5524
 CertUtil: -hashfile 명령이 성공적으로 완료되었습니다.
