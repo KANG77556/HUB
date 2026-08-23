@@ -36,6 +36,10 @@ jobs:
         id: editing
         run: call android-source\scripts\test-document-editing.cmd
 
+      - name: Verify open-with document contract
+        id: open_with
+        run: call android-source\scripts\test-open-with.cmd
+
       - name: Prepare pinned portable JDK 17
         id: jdk
         run: |
@@ -120,7 +124,7 @@ jobs:
       - name: Verify internal-only viewer source
         id: source
         run: |
-          findstr /s /i /c:"ACTION_VIEW" android-source\app\src\main\java\*.kt >nul && exit /b 31 || ver >nul
+          findstr /s /i /c:"ACTION_VIEW" android-source\app\src\main\java\kr\co\alldocuments\ui\DocumentViewer.kt >nul && exit /b 31 || ver >nul
           findstr /s /i /c:"외부 앱으로 열기" android-source\app\src\main\java\*.kt >nul && exit /b 32 || ver >nul
           findstr /i /c:"ViewerKind.OFFICE" android-source\app\src\main\java\kr\co\alldocuments\domain\DocumentViewerStrategy.kt >nul || exit /b 33
 
@@ -181,6 +185,7 @@ jobs:
           >> diagnostics\all-documents-main-build.txt echo UI=${{ steps.ui.outcome }}
           >> diagnostics\all-documents-main-build.txt echo SECURITY=${{ steps.security.outcome }}
           >> diagnostics\all-documents-main-build.txt echo EDITING=${{ steps.editing.outcome }}
+          >> diagnostics\all-documents-main-build.txt echo OPEN_WITH=${{ steps.open_with.outcome }}
           >> diagnostics\all-documents-main-build.txt echo JDK=${{ steps.jdk.outcome }}
           >> diagnostics\all-documents-main-build.txt echo GRADLE=${{ steps.gradle.outcome }}
           >> diagnostics\all-documents-main-build.txt echo RHWP=${{ steps.rhwp.outcome }}

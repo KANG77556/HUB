@@ -33,6 +33,9 @@ jobs:
       - name: Verify document editing contract
         run: call android-source\scripts\test-document-editing.cmd
 
+      - name: Verify open-with document contract
+        run: call android-source\scripts\test-open-with.cmd
+
       - name: Prepare pinned portable JDK 17
         run: |
           set "TOOLS=%RUNNER_TEMP%\hub-tools"
@@ -85,7 +88,7 @@ jobs:
 
       - name: Verify internal-only viewer source
         run: |
-          findstr /s /i /c:"ACTION_VIEW" android-source\app\src\main\java\*.kt >nul && exit /b 31 || ver >nul
+          findstr /s /i /c:"ACTION_VIEW" android-source\app\src\main\java\kr\co\alldocuments\ui\DocumentViewer.kt >nul && exit /b 31 || ver >nul
           findstr /s /i /c:"외부 앱으로 열기" android-source\app\src\main\java\*.kt >nul && exit /b 32 || ver >nul
           findstr /i /c:"ViewerKind.OFFICE" android-source\app\src\main\java\kr\co\alldocuments\domain\DocumentViewerStrategy.kt >nul || exit /b 33
 
