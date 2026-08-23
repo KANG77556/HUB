@@ -67,11 +67,12 @@ internal fun loadOfficePreview(resolver: ContentResolver, uri: Uri, name: String
                 .map(::extractXmlText)
             listOf(shared) + sheets
         }
-        else -> entries
+        "pptx" -> entries
             .filterKeys { it.startsWith("ppt/slides/slide") && it.endsWith(".xml") }
             .toSortedMap()
             .values
             .map(::extractXmlText)
+        else -> emptyList()
     }.filter { it.isNotBlank() }
 
     return OfficePreview(sections.ifEmpty { listOf("문서에서 표시할 텍스트를 찾지 못했습니다.") })
