@@ -20,26 +20,30 @@ findstr /c:"blockedWebResponse" "%VIEWER%" >nul || exit /b 19
 findstr /c:"MAX_OFFICE_UNCOMPRESSED_BYTES" "%OFFICE%" >nul || exit /b 20
 findstr /c:"MAX_OFFICE_ENTRY_BYTES" "%OFFICE%" >nul || exit /b 21
 findstr /c:"readLimitedBytes" "%OFFICE%" >nul || exit /b 22
-findstr /c:"FEATURE_SECURE_PROCESSING" "%OFFICE%" >nul || exit /b 23
-findstr /c:"MAX_TEXT_BYTES" "%VIEWER%" >nul || exit /b 24
-findstr /c:"MAX_IMAGE_BYTES" "%VIEWER%" >nul || exit /b 25
-findstr /c:"MAX_PDF_PAGES" "%VIEWER%" >nul || exit /b 26
-findstr /c:"MAX_PDF_TOTAL_PIXELS" "%VIEWER%" >nul || exit /b 27
-findstr /c:"MAX_RHWP_PAGES" "%HTML%" >nul || exit /b 28
-findstr /c:"BACKING_SCALE=1.5" "%HTML%" >nul || exit /b 29
-findstr /c:"versionName = \"1.1.0\"" "%GRADLE%" >nul || exit /b 30
-findstr /c:"signingConfigs" "%GRADLE%" >nul || exit /b 31
-findstr /c:"ALLDOC_KEYSTORE_PATH" "%GRADLE%" >nul || exit /b 32
-findstr /c:"@rhwp/core@0.8.4" "%PRWF%" >nul || exit /b 33
-findstr /c:"RHWP_TGZ_SHA256=156e9cbcc7fa2443b087efaceb5615eccb91117d83695cbb653f8755ca994e1e" "%PRWF%" >nul || exit /b 34
-findstr /c:"certutil -hashfile \"%%RHWP_TGZ%%\" SHA256" "%PRWF%" >nul || exit /b 35
-findstr /c:"assembleRelease" "%MAINWF%" >nul || exit /b 36
-findstr /c:"apksigner" "%MAINWF%" >nul || exit /b 37
-findstr /c:"all-documents-release.apk" "%MAINWF%" >nul || exit /b 38
-findstr /c:"Prepare persistent release signing key" "%MAINWF%" >nul || exit /b 39
+findstr /c:"disallow-doctype-decl" "%OFFICE%" >nul || exit /b 23
+findstr /c:"external-general-entities" "%OFFICE%" >nul || exit /b 24
+findstr /c:"external-parameter-entities" "%OFFICE%" >nul || exit /b 25
+findstr /c:"isXIncludeAware" "%OFFICE%" >nul && exit /b 26 || ver >nul
+findstr /c:"FEATURE_SECURE_PROCESSING" "%OFFICE%" >nul && exit /b 27 || ver >nul
+findstr /c:"MAX_TEXT_BYTES" "%VIEWER%" >nul || exit /b 28
+findstr /c:"MAX_IMAGE_BYTES" "%VIEWER%" >nul || exit /b 29
+findstr /c:"MAX_PDF_PAGES" "%VIEWER%" >nul || exit /b 30
+findstr /c:"MAX_PDF_TOTAL_PIXELS" "%VIEWER%" >nul || exit /b 31
+findstr /c:"MAX_RHWP_PAGES" "%HTML%" >nul || exit /b 32
+findstr /c:"BACKING_SCALE=1.5" "%HTML%" >nul || exit /b 33
+findstr /c:"versionName = \"1.1.0\"" "%GRADLE%" >nul || exit /b 34
+findstr /c:"signingConfigs" "%GRADLE%" >nul || exit /b 35
+findstr /c:"ALLDOC_KEYSTORE_PATH" "%GRADLE%" >nul || exit /b 36
+findstr /c:"@rhwp/core@0.8.4" "%PRWF%" >nul || exit /b 37
+findstr /c:"RHWP_TGZ_SHA256=156e9cbcc7fa2443b087efaceb5615eccb91117d83695cbb653f8755ca994e1e" "%PRWF%" >nul || exit /b 38
+findstr /c:"certutil -hashfile \"%%RHWP_TGZ%%\" SHA256" "%PRWF%" >nul || exit /b 39
+findstr /c:"assembleRelease" "%MAINWF%" >nul || exit /b 40
+findstr /c:"apksigner" "%MAINWF%" >nul || exit /b 41
+findstr /c:"all-documents-release.apk" "%MAINWF%" >nul || exit /b 42
+findstr /c:"Prepare persistent release signing key" "%MAINWF%" >nul || exit /b 43
 
-if not exist android-source\app\src\main\res\drawable\ic_launcher_foreground.xml exit /b 40
-if not exist android-source\app\src\main\res\mipmap-anydpi-v26\ic_launcher.xml exit /b 41
+if not exist android-source\app\src\main\res\drawable\ic_launcher_foreground.xml exit /b 44
+if not exist android-source\app\src\main\res\mipmap-anydpi-v26\ic_launcher.xml exit /b 45
 
 echo Security hardening contract passed
 exit /b 0
