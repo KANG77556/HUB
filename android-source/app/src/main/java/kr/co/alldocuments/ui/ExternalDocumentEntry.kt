@@ -1,5 +1,6 @@
 package kr.co.alldocuments.ui
 
+import android.content.ContentResolver
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,6 +36,7 @@ fun ExternalDocumentEntry(
     val editorRepository = remember(context) { DocumentEditorRepository(context.contentResolver) }
     var selectedDocument by remember(request.id) { mutableStateOf<DocumentItem?>(null) }
     var pendingSaveAs by remember(request.id) { mutableStateOf<SaveAsRequest?>(null) }
+    var permissionFallbackLaunched by remember(request.id) { mutableStateOf(false) }
 
     fun persistSaveAs(uri: Uri?) {
         val pending = pendingSaveAs
@@ -65,6 +67,15 @@ fun ExternalDocumentEntry(
         ActivityResultContracts.CreateDocument("application/vnd.hancom.hwpx"),
         onResult = ::persistSaveAs
     )
+    val permissionPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) {
+            onBack()
+        } else {
+            viewModel.addDocument(uri)?.let { selectedDocument = viewModel.openDocument(it) }
+        }
+    }
 
     fun launchSaveAs(saveRequest: SaveAsRequest) {
         pendingSaveAs = saveRequest
@@ -76,7 +87,15 @@ fun ExternalDocumentEntry(
     }
 
     LaunchedEffect(request.id) {
-        selectedDocument = viewModel.addDocument(request.uri)?.let(viewModel::openDocument)
+        val readable = withContext(Dispatchers.IO) {
+            canReadExternalUri(context.contentResolver, request.uri)
+        }
+        if (readable) {
+            selectedDocument = viewModel.addDocument(request.uri)?.let(viewModel::openDocument)
+        } else if (!permissionFallbackLaunched) {
+            permissionFallbackLaunched = true
+            permissionPicker.launch(arrayOf("*/*"))
+        }
     }
 
     val item = selectedDocument
@@ -92,3 +111,7 @@ fun ExternalDocumentEntry(
         )
     }
 }
+
+private fun canReadExternalUri(resolver: ContentResolver, uri: Uri): Boolean = runCatching {
+    resolver.openFileDescriptor(uri, "r")?.use { true } ?: false
+}.getOrDefault(false)

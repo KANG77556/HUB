@@ -23,6 +23,9 @@ if not exist "%ENTRY%" exit /b 114
 findstr /c:"LaunchedEffect(request.id)" "%ENTRY%" >nul || exit /b 115
 findstr /c:"viewModel.addDocument(request.uri)" "%ENTRY%" >nul || exit /b 116
 findstr /c:"EditableDocumentViewer" "%ENTRY%" >nul || exit /b 117
+findstr /c:"ActivityResultContracts.OpenDocument()" "%ENTRY%" >nul || exit /b 118
+findstr /c:"canReadExternalUri" "%ENTRY%" >nul || exit /b 119
+findstr /c:"permissionPicker.launch" "%ENTRY%" >nul || exit /b 120
 
 findstr /c:"extension in setOf(\"docx\", \"xlsx\", \"pptx\")" "%STRATEGY%" >nul || exit /b 121
 findstr /c:"\"pptx\" ->" "%OFFICE%" >nul || exit /b 122
