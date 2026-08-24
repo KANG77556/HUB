@@ -1,0 +1,20 @@
+name: COM2 Runner Probe
+
+on:
+  push:
+    branches: [com2-runner-probe-20260824]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Probe runner
+        shell: cmd
+        run: |
+          echo COM2_RUNNER_PROBE_OK
+          ver
