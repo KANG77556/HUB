@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/com2-runner-probe.yml'
       - 'com2-deploy/**'
+      - 'fold8-deploy/**'
   workflow_dispatch:
 
 permissions:
@@ -18,11 +19,17 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 5
     steps:
-      - name: Verify persisted COM2 sidecar
+      - name: Locate Android build environment
         shell: cmd
         run: |
-          echo COM2_PERSISTENCE_PROBE
-          curl.exe -fsS http://127.0.0.1:8767/healthz | findstr /x "ok" >nul || exit /b 31
-          > "%RUNNER_TEMP%\tools-req.json" echo {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
-          curl.exe -fsS -H "Content-Type: application/json" --data-binary @"%RUNNER_TEMP%\tools-req.json" http://127.0.0.1:8767/mcp | findstr /c:"\"name\":\"get_file_hash\"" >nul || exit /b 32
-          echo COM2_PERSISTED_OK
+          echo ANDROID_ENV_PROBE
+          if exist "C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe" echo JAVA17_OK=True
+          if exist "C:\actions-runner\runner-03\_work\_tool\android-sdk-36" echo SDK36_OK=True
+          echo GRADLE_SEARCH_BEGIN
+          where /r C:\actions-runner gradle.bat 2>nul
+          echo GRADLE_SEARCH_END
+          echo SDK_TOOLS_BEGIN
+          dir /b "C:\actions-runner\runner-03\_work\_tool\android-sdk-36\platforms" 2>nul
+          dir /b "C:\actions-runner\runner-03\_work\_tool\android-sdk-36\build-tools" 2>nul
+          echo SDK_TOOLS_END
+          exit /b 0
