@@ -19,17 +19,12 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 5
     steps:
-      - name: Locate Android build environment
+      - name: Locate Gradle 9.1 cache
         shell: cmd
         run: |
-          echo ANDROID_ENV_PROBE
-          if exist "C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe" echo JAVA17_OK=True
-          if exist "C:\actions-runner\runner-03\_work\_tool\android-sdk-36" echo SDK36_OK=True
-          echo GRADLE_SEARCH_BEGIN
-          where /r C:\actions-runner gradle.bat 2>nul
-          echo GRADLE_SEARCH_END
-          echo SDK_TOOLS_BEGIN
-          dir /b "C:\actions-runner\runner-03\_work\_tool\android-sdk-36\platforms" 2>nul
-          dir /b "C:\actions-runner\runner-03\_work\_tool\android-sdk-36\build-tools" 2>nul
-          echo SDK_TOOLS_END
+          echo GRADLE_91_PROBE
+          if exist "C:\Users\USER\.gradle\wrapper\dists\gradle-9.1.0-all\f36z46sifdyepuwewyafe5rwl\gradle-9.1.0\bin\gradle.bat" echo GRADLE91_KNOWN=True
+          echo GRADLE_USER_SEARCH_BEGIN
+          for /r "C:\Users\USER\.gradle\wrapper\dists" %%F in (gradle.bat) do @echo %%F
+          echo GRADLE_USER_SEARCH_END
           exit /b 0
