@@ -30,6 +30,11 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath 'C:\actions-runner\com2-dev\fold8-source.zip' -DestinationPath 'C:\actions-runner\com2-dev\fold8-work' -Force"
           echo FOLD8_SOURCE_OK
 
+      - name: Apply verified Compose fixes
+        shell: cmd
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File fold8-deploy\v4\apply-compile-fixes.ps1 -Root C:\actions-runner\com2-dev\fold8-work
+
       - name: Reconstruct COM2 sidecar
         shell: cmd
         run: |
@@ -37,15 +42,17 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('C:\actions-runner\com2-dev\COM2DevServer.jar',[Convert]::FromBase64String([IO.File]::ReadAllText('C:\actions-runner\com2-dev\com2-jar.b64')))"
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'C:\actions-runner\com2-dev\COM2DevServer.jar' -Algorithm SHA256).Hash.ToLowerInvariant(); Write-Host ('COM2_JAR_SHA256='+$h); if($h -ne 'fe87a8b8b08b44b917cc6a98bec4f13c893679c6cf868e717c635d2c56645453'){exit 11}"
 
-      - name: Install Gradle 9.1
+      - name: Prepare Gradle 9.1
         shell: cmd
         run: |
-          if exist C:\actions-runner\com2-dev\gradle-9.1.0-dist rmdir /s /q C:\actions-runner\com2-dev\gradle-9.1.0-dist
-          mkdir C:\actions-runner\com2-dev\gradle-9.1.0-dist
-          curl.exe -fL --retry 2 -o C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip https://services.gradle.org/distributions/gradle-9.1.0-bin.zip
-          curl.exe -fL --retry 2 -o C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip.sha256 https://services.gradle.org/distributions/gradle-9.1.0-bin.zip.sha256
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$exp=(Get-Content 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip.sha256' -Raw).Trim().Split(' ')[0].ToLowerInvariant(); $got=(Get-FileHash 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip' -Algorithm SHA256).Hash.ToLowerInvariant(); Write-Host ('GRADLE_EXPECTED='+$exp); Write-Host ('GRADLE_ACTUAL='+$got); if($got -ne $exp){exit 12}"
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip' -DestinationPath 'C:\actions-runner\com2-dev\gradle-9.1.0-dist' -Force"
+          if not exist C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat (
+            if exist C:\actions-runner\com2-dev\gradle-9.1.0-dist rmdir /s /q C:\actions-runner\com2-dev\gradle-9.1.0-dist
+            mkdir C:\actions-runner\com2-dev\gradle-9.1.0-dist
+            curl.exe -fL --retry 2 -o C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip https://services.gradle.org/distributions/gradle-9.1.0-bin.zip
+            curl.exe -fL --retry 2 -o C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip.sha256 https://services.gradle.org/distributions/gradle-9.1.0-bin.zip.sha256
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$exp=(Get-Content 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip.sha256' -Raw).Trim().Split(' ')[0].ToLowerInvariant(); $got=(Get-FileHash 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip' -Algorithm SHA256).Hash.ToLowerInvariant(); Write-Host ('GRADLE_EXPECTED='+$exp); Write-Host ('GRADLE_ACTUAL='+$got); if($got -ne $exp){exit 12}"
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip' -DestinationPath 'C:\actions-runner\com2-dev\gradle-9.1.0-dist' -Force"
+          )
           C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat --version
 
       - name: Build through COM2
@@ -60,7 +67,7 @@ jobs:
           start "" /b "%JAVA_HOME%\bin\java.exe" -jar C:\actions-runner\com2-dev\COM2DevServer.jar > C:\actions-runner\com2-dev\com2-build.log 2>&1
           ping 127.0.0.1 -n 3 >nul
           curl.exe -fsS http://127.0.0.1:8767/healthz
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$body=@{jsonrpc='2.0';id=1;method='tools/call';params=@{name='run_command';arguments=@{command='\"C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat\" --no-daemon clean assembleDebug';working_directory='C:\actions-runner\com2-dev\fold8-work';timeout_ms=900000}}}|ConvertTo-Json -Depth 8 -Compress; [IO.File]::WriteAllText('C:\actions-runner\com2-dev\build-request.json',$body)"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$body=@{jsonrpc='2.0';id=1;method='tools/call';params=@{name='run_command';arguments=@{command='C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat --no-daemon clean assembleDebug';working_directory='C:\actions-runner\com2-dev\fold8-work';timeout_ms=900000}}}|ConvertTo-Json -Depth 8 -Compress; [IO.File]::WriteAllText('C:\actions-runner\com2-dev\build-request.json',$body)"
           curl.exe -fsS -H "Content-Type: application/json" --data-binary "@C:\actions-runner\com2-dev\build-request.json" http://127.0.0.1:8767/mcp > C:\actions-runner\com2-dev\build-response.json
           type C:\actions-runner\com2-dev\build-response.json
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$r=Get-Content 'C:\actions-runner\com2-dev\build-response.json' -Raw|ConvertFrom-Json; if($r.result.isError){Write-Error $r.result.content[0].text; exit 13}; Write-Host 'COM2_BUILD_CALL_OK'"
