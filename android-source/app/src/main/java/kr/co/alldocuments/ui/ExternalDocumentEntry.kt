@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kr.co.alldocuments.ExternalOpenRequest
 import kr.co.alldocuments.data.DocumentEditorRepository
+import kr.co.alldocuments.data.ExternalDocumentImporter
 import kr.co.alldocuments.domain.DocumentItem
 
 @Composable
@@ -35,6 +36,7 @@ fun ExternalDocumentEntry(
     val resolver = context.contentResolver
     val scope = rememberCoroutineScope()
     val editorRepository = remember(context) { DocumentEditorRepository(resolver) }
+    val importer = remember(context) { ExternalDocumentImporter(context.applicationContext) }
     var selectedDocument by remember(request.id) { mutableStateOf<DocumentItem?>(null) }
     var pendingSaveAs by remember(request.id) { mutableStateOf<SaveAsRequest?>(null) }
     var permissionFallbackLaunched by remember(request.id) { mutableStateOf(false) }
@@ -46,9 +48,7 @@ fun ExternalDocumentEntry(
             return
         }
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                editorRepository.writeBytes(uri, pending.bytes)
-            }
+            val result = withContext(Dispatchers.IO) { editorRepository.writeBytes(uri, pending.bytes) }
             if (result.isSuccess) {
                 pendingSaveAs = null
                 viewModel.addDocument(uri)?.let { selectedDocument = viewModel.openDocument(it) }
@@ -57,27 +57,34 @@ fun ExternalDocumentEntry(
     }
 
     val textSaveAsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/plain"),
-        onResult = ::persistSaveAs
+        ActivityResultContracts.CreateDocument("text/plain"), onResult = ::persistSaveAs
     )
     val hwpSaveAsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/x-hwp"),
-        onResult = ::persistSaveAs
+        ActivityResultContracts.CreateDocument("application/x-hwp"), onResult = ::persistSaveAs
     )
     val hwpxSaveAsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/vnd.hancom.hwpx"),
-        onResult = ::persistSaveAs
+        ActivityResultContracts.CreateDocument("application/vnd.hancom.hwpx"), onResult = ::persistSaveAs
     )
-    val permissionPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
+
+    fun openImported(source: Uri) {
+        scope.launch {
+            try {
+                val importedUri = withContext(Dispatchers.IO) { importer.importDocument(source) }
+                viewModel.addDocument(importedUri)?.let { selectedDocument = viewModel.openDocument(it) }
+            } catch (_: SecurityException) {
+                if (!permissionFallbackLaunched) {
+                    permissionFallbackLaunched = true
+                }
+            }
+        }
+    }
+
+    val permissionPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) {
             onBack()
         } else {
-            runCatching {
-                resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            viewModel.addDocument(uri)?.let { selectedDocument = viewModel.openDocument(it) }
+            runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            openImported(uri)
         }
     }
 
@@ -94,19 +101,12 @@ fun ExternalDocumentEntry(
         val persistableRead = request.grantFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0 &&
             request.grantFlags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
         if (persistableRead) {
-            runCatching {
-                resolver.takePersistableUriPermission(request.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
+            runCatching { resolver.takePersistableUriPermission(request.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         }
 
         try {
-            withContext(Dispatchers.IO) {
-                resolver.openInputStream(request.uri)?.use { stream ->
-                    val probe = ByteArray(1)
-                    stream.read(probe)
-                } ?: throw SecurityException("Unable to open external document")
-            }
-            selectedDocument = viewModel.addDocument(request.uri)?.let(viewModel::openDocument)
+            val importedUri = withContext(Dispatchers.IO) { importer.importDocument(request.uri) }
+            viewModel.addDocument(importedUri)?.let { selectedDocument = viewModel.openDocument(it) }
         } catch (_: SecurityException) {
             if (!permissionFallbackLaunched) {
                 permissionFallbackLaunched = true
@@ -117,9 +117,7 @@ fun ExternalDocumentEntry(
 
     val item = selectedDocument
     if (item == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     } else {
         EditableDocumentViewer(
             item = item,
