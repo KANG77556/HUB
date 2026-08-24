@@ -22,6 +22,7 @@ jobs:
         shell: cmd
         run: |
           if not exist ci-proof mkdir ci-proof
+          if not exist downloads mkdir downloads
           copy /b fold8-deploy\v4\fold8.b64.00+fold8-deploy\v4\fold8.b64.01+fold8-deploy\v4\fold8.b64.02+fold8-deploy\v4\fold8.b64.03+fold8-deploy\v4\fold8.b64.04+fold8-deploy\v4\fold8.b64.05 "%GITHUB_WORKSPACE%\fold8.b64"
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('%GITHUB_WORKSPACE%\fold8-source.zip',[Convert]::FromBase64String([IO.File]::ReadAllText('%GITHUB_WORKSPACE%\fold8.b64')))"
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash '%GITHUB_WORKSPACE%\fold8-source.zip' -Algorithm SHA256).Hash.ToLowerInvariant(); if($h -ne '9ad5c170a10dc014382ca5f76f7002a45b1cfc237b097a46121c8354d71d2392'){exit 10}"
@@ -51,16 +52,9 @@ jobs:
           if not exist "%GITHUB_WORKSPACE%\fold8-work\app\build\outputs\apk\debug\app-debug.apk" exit /b 20
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash '%GITHUB_WORKSPACE%\fold8-work\app\build\outputs\apk\debug\app-debug.apk' -Algorithm SHA256).Hash.ToLowerInvariant(); [IO.File]::WriteAllText('%GITHUB_WORKSPACE%\apk.sha256.txt',$h); $body=@{jsonrpc='2.0';id=2;method='tools/call';params=@{name='get_file_hash';arguments=@{path='%GITHUB_WORKSPACE%\fold8-work\app\build\outputs\apk\debug\app-debug.apk';algorithm='SHA-256'}}}|ConvertTo-Json -Depth 8 -Compress; [IO.File]::WriteAllText('%GITHUB_WORKSPACE%\hash-request.json',$body)"
           curl.exe -fsS -H "Content-Type: application/json" --data-binary "@%GITHUB_WORKSPACE%\hash-request.json" http://127.0.0.1:8767/mcp > "%GITHUB_WORKSPACE%\hash-response.json"
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$local=(Get-Content '%GITHUB_WORKSPACE%\apk.sha256.txt' -Raw).Trim(); $r=Get-Content '%GITHUB_WORKSPACE%\hash-response.json' -Raw|ConvertFrom-Json; if($r.error -or $r.result.isError){exit 21}; $inner=$r.result.content[0].text|ConvertFrom-Json; if($inner.hash -ne $local){Write-Error ('hash mismatch '+$inner.hash+' != '+$local); exit 22}; Write-Host ('COM2_E2E_HASH_OK='+$local)"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$local=(Get-Content '%GITHUB_WORKSPACE%\apk.sha256.txt' -Raw).Trim(); $r=Get-Content '%GITHUB_WORKSPACE%\hash-response.json' -Raw|ConvertFrom-Json; if($r.error -or $r.result.isError){exit 21}; $inner=$r.result.content[0].text|ConvertFrom-Json; if($inner.hash -ne $local){exit 22}; Write-Host ('COM2_E2E_HASH_OK='+$local)"
 
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: Fold8Launcher-alpha02-debug
-          path: ${{ github.workspace }}\fold8-work\app\build\outputs\apk\debug\app-debug.apk
-          retention-days: 7
-
-      - name: Publish COM2 E2E proof
+      - name: Publish APK and E2E proof
         if: always() && github.event_name == 'push'
         shell: cmd
         run: |
@@ -70,8 +64,10 @@ jobs:
           if exist "%GITHUB_WORKSPACE%\build-response.json" powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=(Get-Content '%GITHUB_WORKSPACE%\build-response.json' -Raw); Add-Content 'ci-proof\fold8-v4-build.txt' ('build_response='+$s)"
           if exist "%GITHUB_WORKSPACE%\hash-response.json" powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=(Get-Content '%GITHUB_WORKSPACE%\hash-response.json' -Raw); Add-Content 'ci-proof\fold8-v4-build.txt' ('hash_response='+$s)"
           if exist "%GITHUB_WORKSPACE%\com2-build.log" powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=(Get-Content '%GITHUB_WORKSPACE%\com2-build.log' -Tail 20)-join ' | '; Add-Content 'ci-proof\fold8-v4-build.txt' ('com2_log_tail='+$s)"
+          if exist "%GITHUB_WORKSPACE%\fold8-work\app\build\outputs\apk\debug\app-debug.apk" copy /y "%GITHUB_WORKSPACE%\fold8-work\app\build\outputs\apk\debug\app-debug.apk" downloads\Fold8Launcher-alpha02-debug.apk
+          if exist "%GITHUB_WORKSPACE%\apk.sha256.txt" copy /y "%GITHUB_WORKSPACE%\apk.sha256.txt" downloads\Fold8Launcher-alpha02-debug.sha256.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ci-proof\fold8-v4-build.txt
-          git commit -m "ci: publish Fold8 COM2 same-step E2E proof" || exit /b 0
+          git add ci-proof\fold8-v4-build.txt downloads\Fold8Launcher-alpha02-debug.apk downloads\Fold8Launcher-alpha02-debug.sha256.txt
+          git commit -m "build: publish verified Fold8Launcher alpha02 APK" || exit /b 0
           git push origin HEAD:com2-runner-probe-20260824
