@@ -17,24 +17,16 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 5
     steps:
-      - name: Locate user-scoped COM2 assets
+      - name: Inspect COM2 process metadata
         shell: cmd
         run: |
           echo COM2_RUNNER_PROBE_OK
-          echo MACHINE=%COMPUTERNAME%
-          echo USERPROFILES_BEGIN
-          dir /b /ad C:\Users 2>nul
-          echo USERPROFILES_END
-          echo TUNNEL_SEARCH_BEGIN
-          dir /s /b C:\Users\chatgpt-bridge.yaml 2>nul
-          echo TUNNEL_SEARCH_END
-          echo FOLD8_SEARCH_BEGIN
-          dir /s /b /ad C:\Users\Fold8Launcher 2>nul
-          echo FOLD8_SEARCH_END
-          echo WORKSPACE_SEARCH_BEGIN
-          dir /s /b /ad C:\Users\ChatGPT-Workspace 2>nul
-          echo WORKSPACE_SEARCH_END
-          tasklist /fi "imagename eq ChatGPT MCP Bridge.exe"
-          tasklist /fi "imagename eq tunnel-client.exe"
-          tasklist /fi "imagename eq cloudflared.exe"
+          echo MCP_BRIDGE_PROCESS_BEGIN
+          wmic process where "name='ChatGPT MCP Bridge.exe'" get ProcessId,ExecutablePath,CommandLine /format:list 2>nul
+          echo MCP_BRIDGE_PROCESS_END
+          echo TUNNEL_PROCESS_BEGIN
+          wmic process where "name='tunnel-client.exe'" get ProcessId,ExecutablePath,CommandLine /format:list 2>nul
+          echo TUNNEL_PROCESS_END
+          tasklist /v /fi "imagename eq ChatGPT MCP Bridge.exe"
+          tasklist /v /fi "imagename eq tunnel-client.exe"
           exit /b 0
