@@ -3,15 +3,13 @@ name: Fold8 v4 Build
 on:
   push:
     branches: [com2-runner-probe-20260824]
-  pull_request:
-    branches: [main]
     paths:
       - '.github/workflows/fold8-v4-build.yml'
       - 'fold8-deploy/v4/**'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -79,7 +77,25 @@ jobs:
           echo FOLD8_COM2_E2E_OK
 
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: Fold8Launcher-alpha02-debug
           path: C:\actions-runner\com2-dev\fold8-work\app\build\outputs\apk\debug\app-debug.apk
           retention-days: 7
+
+      - name: Publish diagnostic proof
+        if: always() && github.event_name == 'push'
+        shell: cmd
+        run: |
+          if not exist ci-proof mkdir ci-proof
+          echo commit=${{ github.sha }}> ci-proof\fold8-v4-build.txt
+          echo job_status=${{ job.status }}>> ci-proof\fold8-v4-build.txt
+          if exist C:\actions-runner\com2-dev\apk.sha256.txt for /f "usebackq delims=" %%H in ("C:\actions-runner\com2-dev\apk.sha256.txt") do echo apk_sha256=%%H>> ci-proof\fold8-v4-build.txt
+          if exist C:\actions-runner\com2-dev\build-response.json powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=(Get-Content 'C:\actions-runner\com2-dev\build-response.json' -Raw); [IO.File]::AppendAllText('ci-proof\fold8-v4-build.txt',[Environment]::NewLine+'build_response='+$s)"
+          if exist C:\actions-runner\com2-dev\hash-response.json powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=(Get-Content 'C:\actions-runner\com2-dev\hash-response.json' -Raw); [IO.File]::AppendAllText('ci-proof\fold8-v4-build.txt',[Environment]::NewLine+'hash_response='+$s)"
+          if exist C:\actions-runner\com2-dev\com2-build.log powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=(Get-Content 'C:\actions-runner\com2-dev\com2-build.log' -Tail 40) -join ' | '; [IO.File]::AppendAllText('ci-proof\fold8-v4-build.txt',[Environment]::NewLine+'com2_log_tail='+$s)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-proof\fold8-v4-build.txt
+          git commit -m "ci: publish Fold8 v4 build proof" || exit /b 0
+          git push origin HEAD:com2-runner-probe-20260824
