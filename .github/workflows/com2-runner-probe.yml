@@ -18,16 +18,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Probe runner and COM2 prerequisites
-        shell: powershell
+        shell: cmd
         run: |
-          Write-Output 'COM2_RUNNER_PROBE_OK'
-          Write-Output ('MACHINE=' + $env:COMPUTERNAME)
-          $jar = 'G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\dist\COM2DevServer-1.0.1-reproducible.jar'
-          $cutover = 'G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\scripts\windows\complete_install_and_cutover_v2.ps1'
-          $tunnel = Join-Path $env:LOCALAPPDATA 'ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml'
-          Write-Output ('JAR_EXISTS=' + (Test-Path -LiteralPath $jar))
-          Write-Output ('CUTOVER_EXISTS=' + (Test-Path -LiteralPath $cutover))
-          Write-Output ('TUNNEL_CONFIG_EXISTS=' + (Test-Path -LiteralPath $tunnel))
-          $java = Get-Command java.exe -ErrorAction SilentlyContinue
-          Write-Output ('JAVA_ON_PATH=' + [bool]$java)
-          if ($java) { & $java.Source -version }
+          echo COM2_RUNNER_PROBE_OK
+          echo MACHINE=%COMPUTERNAME%
+          if exist "G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\dist\COM2DevServer-1.0.1-reproducible.jar" (echo JAR_EXISTS=True) else (echo JAR_EXISTS=False)
+          if exist "G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\scripts\windows\complete_install_and_cutover_v2.ps1" (echo CUTOVER_EXISTS=True) else (echo CUTOVER_EXISTS=False)
+          if exist "%LOCALAPPDATA%\ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml" (echo TUNNEL_CONFIG_EXISTS=True) else (echo TUNNEL_CONFIG_EXISTS=False)
+          where java.exe >nul 2>&1 && (echo JAVA_ON_PATH=True & java.exe -version) || echo JAVA_ON_PATH=False
