@@ -17,12 +17,17 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 5
     steps:
-      - name: Probe runner and COM2 prerequisites
+      - name: Probe local deployment paths
         shell: cmd
         run: |
           echo COM2_RUNNER_PROBE_OK
           echo MACHINE=%COMPUTERNAME%
-          if exist "G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\dist\COM2DevServer-1.0.1-reproducible.jar" (echo JAR_EXISTS=True) else (echo JAR_EXISTS=False)
-          if exist "G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\scripts\windows\complete_install_and_cutover_v2.ps1" (echo CUTOVER_EXISTS=True) else (echo CUTOVER_EXISTS=False)
-          if exist "%LOCALAPPDATA%\ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml" (echo TUNNEL_CONFIG_EXISTS=True) else (echo TUNNEL_CONFIG_EXISTS=False)
-          where java.exe >nul 2>&1 && (echo JAVA_ON_PATH=True & java.exe -version) || echo JAVA_ON_PATH=False
+          echo USERPROFILE=%USERPROFILE%
+          whoami
+          for %%P in ("C:\Users\USER\AppData\Local\ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml" "C:\Users\1\AppData\Local\ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml") do @if exist %%~P (echo TUNNEL_CONFIG=%%~P)
+          for %%J in ("C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe" "C:\actions-runner\runner-03\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe" "C:\Program Files\Java\jdk-17\bin\java.exe") do @if exist %%~J (echo JAVA17=%%~J)
+          if exist "C:\Users\USER\Fold8Launcher" echo FOLD8_USER_EXISTS=True
+          if exist "C:\Users\1\Fold8Launcher" echo FOLD8_1_EXISTS=True
+          if exist "C:\Users\USER\ChatGPT-Workspace" echo WORKSPACE_USER_EXISTS=True
+          if exist "C:\Users\1\ChatGPT-Workspace" echo WORKSPACE_1_EXISTS=True
+          exit /b 0
