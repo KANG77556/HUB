@@ -1,6 +1,6 @@
 package kr.co.alldocuments.ui
 
-import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,8 +32,9 @@ fun ExternalDocumentEntry(
     viewModel: DocumentViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val resolver = context.contentResolver
     val scope = rememberCoroutineScope()
-    val editorRepository = remember(context) { DocumentEditorRepository(context.contentResolver) }
+    val editorRepository = remember(context) { DocumentEditorRepository(resolver) }
     var selectedDocument by remember(request.id) { mutableStateOf<DocumentItem?>(null) }
     var pendingSaveAs by remember(request.id) { mutableStateOf<SaveAsRequest?>(null) }
     var permissionFallbackLaunched by remember(request.id) { mutableStateOf(false) }
@@ -73,6 +74,9 @@ fun ExternalDocumentEntry(
         if (uri == null) {
             onBack()
         } else {
+            runCatching {
+                resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             viewModel.addDocument(uri)?.let { selectedDocument = viewModel.openDocument(it) }
         }
     }
@@ -87,14 +91,27 @@ fun ExternalDocumentEntry(
     }
 
     LaunchedEffect(request.id) {
-        val readable = withContext(Dispatchers.IO) {
-            canReadExternalUri(context.contentResolver, request.uri)
+        val persistableRead = request.grantFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0 &&
+            request.grantFlags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
+        if (persistableRead) {
+            runCatching {
+                resolver.takePersistableUriPermission(request.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
         }
-        if (readable) {
+
+        try {
+            withContext(Dispatchers.IO) {
+                resolver.openInputStream(request.uri)?.use { stream ->
+                    val probe = ByteArray(1)
+                    stream.read(probe)
+                } ?: throw SecurityException("Unable to open external document")
+            }
             selectedDocument = viewModel.addDocument(request.uri)?.let(viewModel::openDocument)
-        } else if (!permissionFallbackLaunched) {
-            permissionFallbackLaunched = true
-            permissionPicker.launch(arrayOf("*/*"))
+        } catch (_: SecurityException) {
+            if (!permissionFallbackLaunched) {
+                permissionFallbackLaunched = true
+                permissionPicker.launch(arrayOf("*/*"))
+            }
         }
     }
 
@@ -111,7 +128,3 @@ fun ExternalDocumentEntry(
         )
     }
 }
-
-private fun canReadExternalUri(resolver: ContentResolver, uri: Uri): Boolean = runCatching {
-    resolver.openFileDescriptor(uri, "r")?.use { true } ?: false
-}.getOrDefault(false)
