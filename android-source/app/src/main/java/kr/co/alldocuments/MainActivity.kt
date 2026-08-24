@@ -12,7 +12,11 @@ import kr.co.alldocuments.ui.AllDocumentsApp
 import kr.co.alldocuments.ui.ExternalDocumentEntry
 import kr.co.alldocuments.ui.theme.AllDocumentsTheme
 
-data class ExternalOpenRequest(val id: Long, val uri: Uri)
+data class ExternalOpenRequest(
+    val id: Long,
+    val uri: Uri,
+    val grantFlags: Int
+)
 
 class MainActivity : ComponentActivity() {
     private var requestSequence = 0L
@@ -45,7 +49,12 @@ class MainActivity : ComponentActivity() {
     private fun extractOpenRequest(intent: Intent?): ExternalOpenRequest? {
         if (intent?.action != Intent.ACTION_VIEW) return null
         val uri = intent.data ?: return null
+        val grantFlags = intent.flags and (
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
         requestSequence += 1
-        return ExternalOpenRequest(requestSequence, uri)
+        return ExternalOpenRequest(requestSequence, uri, grantFlags)
     }
 }

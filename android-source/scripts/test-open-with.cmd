@@ -19,17 +19,23 @@ findstr /c:"image/*" "%MANIFEST%" >nul || exit /b 107
 findstr /c:"Intent.ACTION_VIEW" "%MAIN%" >nul || exit /b 111
 findstr /c:"onNewIntent" "%MAIN%" >nul || exit /b 112
 findstr /c:"ExternalOpenRequest" "%MAIN%" >nul || exit /b 113
-if not exist "%ENTRY%" exit /b 114
-findstr /c:"LaunchedEffect(request.id)" "%ENTRY%" >nul || exit /b 115
-findstr /c:"viewModel.addDocument(request.uri)" "%ENTRY%" >nul || exit /b 116
-findstr /c:"EditableDocumentViewer" "%ENTRY%" >nul || exit /b 117
-findstr /c:"ActivityResultContracts.OpenDocument()" "%ENTRY%" >nul || exit /b 118
-findstr /c:"canReadExternalUri" "%ENTRY%" >nul || exit /b 119
-findstr /c:"permissionPicker.launch" "%ENTRY%" >nul || exit /b 120
+findstr /c:"grantFlags" "%MAIN%" >nul || exit /b 114
+findstr /c:"Intent.FLAG_GRANT_READ_URI_PERMISSION" "%MAIN%" >nul || exit /b 115
+findstr /c:"intent.flags" "%MAIN%" >nul || exit /b 116
+if not exist "%ENTRY%" exit /b 117
+findstr /c:"LaunchedEffect(request.id)" "%ENTRY%" >nul || exit /b 118
+findstr /c:"viewModel.addDocument(request.uri)" "%ENTRY%" >nul || exit /b 119
+findstr /c:"EditableDocumentViewer" "%ENTRY%" >nul || exit /b 120
+findstr /c:"ActivityResultContracts.OpenDocument()" "%ENTRY%" >nul || exit /b 121
+findstr /c:"request.grantFlags" "%ENTRY%" >nul || exit /b 122
+findstr /c:"takePersistableUriPermission" "%ENTRY%" >nul || exit /b 123
+findstr /c:"SecurityException" "%ENTRY%" >nul || exit /b 124
+findstr /c:"permissionPicker.launch" "%ENTRY%" >nul || exit /b 125
+findstr /c:"canReadExternalUri" "%ENTRY%" >nul && exit /b 126
 
-findstr /c:"extension in setOf(\"docx\", \"xlsx\", \"pptx\")" "%STRATEGY%" >nul || exit /b 121
-findstr /c:"\"pptx\" ->" "%OFFICE%" >nul || exit /b 122
-findstr /i /c:"Intent.ACTION_VIEW" "%VIEWER%" >nul && exit /b 123
+findstr /c:"extension in setOf(\"docx\", \"xlsx\", \"pptx\")" "%STRATEGY%" >nul || exit /b 131
+findstr /c:"\"pptx\" ->" "%OFFICE%" >nul || exit /b 132
+findstr /i /c:"Intent.ACTION_VIEW" "%VIEWER%" >nul && exit /b 133
 
-echo Open-with document contract passed
+echo Open-with document grant contract passed
 exit /b 0
