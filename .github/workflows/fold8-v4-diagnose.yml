@@ -1,0 +1,29 @@
+name: Fold8 v4 Diagnose
+
+on:
+  push:
+    branches: [com2-runner-probe-20260824]
+    paths:
+      - '.github/workflows/fold8-v4-diagnose.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect evidence
+        shell: cmd
+        run: |
+          if not exist ci-proof mkdir ci-proof
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p='ci-proof\fold8-v4-diagnose.txt'; $root='C:\actions-runner\com2-dev'; $lines=@('commit=${{ github.sha }}'); foreach($f in @('fold8.b64','fold8-source.zip','COM2DevServer.jar','gradle-9.1.0-bin.zip','gradle-9.1.0-bin.zip.sha256','gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat','fold8-work\app\build.gradle.kts','build-response.json','com2-build.log')){$x=Join-Path $root $f; $exists=Test-Path $x; $lines += ($f+'_exists='+$exists); if($exists -and -not (Get-Item $x).PSIsContainer){$lines += ($f+'_size='+(Get-Item $x).Length)}}; foreach($f in @('fold8-source.zip','COM2DevServer.jar','gradle-9.1.0-bin.zip')){$x=Join-Path $root $f; if(Test-Path $x){$lines += ($f+'_sha256='+(Get-FileHash $x -Algorithm SHA256).Hash.ToLowerInvariant())}}; if(Test-Path (Join-Path $root 'build-response.json')){$lines += ('build_response='+(Get-Content (Join-Path $root 'build-response.json') -Raw))}; if(Test-Path (Join-Path $root 'com2-build.log')){$lines += ('com2_log_tail='+((Get-Content (Join-Path $root 'com2-build.log') -Tail 40) -join ' | '))}; [IO.File]::WriteAllLines($p,$lines)"
+          type ci-proof\fold8-v4-diagnose.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-proof\fold8-v4-diagnose.txt
+          git commit -m "ci: publish Fold8 v4 diagnosis" || exit /b 0
+          git push origin HEAD:com2-runner-probe-20260824
