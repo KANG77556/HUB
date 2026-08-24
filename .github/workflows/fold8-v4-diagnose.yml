@@ -13,17 +13,38 @@ permissions:
 jobs:
   diagnose:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Collect evidence
+      - name: Stage-by-stage diagnosis
         shell: cmd
         run: |
           if not exist ci-proof mkdir ci-proof
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p='ci-proof\fold8-v4-diagnose.txt'; $root='C:\actions-runner\com2-dev'; $lines=@('commit=${{ github.sha }}'); foreach($f in @('fold8.b64','fold8-source.zip','COM2DevServer.jar','gradle-9.1.0-bin.zip','gradle-9.1.0-bin.zip.sha256','gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat','fold8-work\app\build.gradle.kts','build-response.json','com2-build.log')){$x=Join-Path $root $f; $exists=Test-Path $x; $lines += ($f+'_exists='+$exists); if($exists -and -not (Get-Item $x).PSIsContainer){$lines += ($f+'_size='+(Get-Item $x).Length)}}; foreach($f in @('fold8-source.zip','COM2DevServer.jar','gradle-9.1.0-bin.zip')){$x=Join-Path $root $f; if(Test-Path $x){$lines += ($f+'_sha256='+(Get-FileHash $x -Algorithm SHA256).Hash.ToLowerInvariant())}}; if(Test-Path (Join-Path $root 'build-response.json')){$lines += ('build_response='+(Get-Content (Join-Path $root 'build-response.json') -Raw))}; if(Test-Path (Join-Path $root 'com2-build.log')){$lines += ('com2_log_tail='+((Get-Content (Join-Path $root 'com2-build.log') -Tail 40) -join ' | '))}; [IO.File]::WriteAllLines($p,$lines)"
-          type ci-proof\fold8-v4-diagnose.txt
+          set "P=ci-proof\fold8-v4-stage-diagnose.txt"
+          set "ROOT=C:\actions-runner\com2-dev"
+          set "JAVA_HOME=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64"
+          set "ANDROID_HOME=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          > "%P%" echo commit=${{ github.sha }}
+          if exist "%JAVA_HOME%\bin\java.exe" (echo java_exists=True>>"%P%") else (echo java_exists=False>>"%P%")
+          if exist "%ANDROID_HOME%\platforms\android-36" (echo sdk36_exists=True>>"%P%") else (echo sdk36_exists=False>>"%P%")
+          "%JAVA_HOME%\bin\java.exe" -version > "%ROOT%\java-version.out" 2>&1
+          echo java_version_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\java-version.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('java_version='+$o)"
+          call "%ROOT%\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat" --version > "%ROOT%\gradle-version.out" 2>&1
+          echo gradle_version_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\gradle-version.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('gradle_version='+$o)"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$exp=(Get-Content '%ROOT%\gradle-9.1.0-bin.zip.sha256' -Raw).Trim().Split(' ')[0].ToLowerInvariant();$got=(Get-FileHash '%ROOT%\gradle-9.1.0-bin.zip' -Algorithm SHA256).Hash.ToLowerInvariant();Add-Content '%P%' ('gradle_expected='+$exp);Add-Content '%P%' ('gradle_actual='+$got);Add-Content '%P%' ('gradle_hash_match='+($exp -eq $got))"
+          set "COM2_BIND_HOST=127.0.0.1"
+          set "COM2_PORT=8767"
+          set "COM2_ALLOWED_ROOTS=C:\actions-runner\com2-dev"
+          start "" /b "%JAVA_HOME%\bin\java.exe" -jar "%ROOT%\COM2DevServer.jar" > "%ROOT%\com2-stage.log" 2>&1
+          ping 127.0.0.1 -n 3 >nul
+          curl.exe -fsS http://127.0.0.1:8767/healthz > "%ROOT%\health.out" 2>&1
+          echo com2_health_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\health.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('com2_health='+$o); if(Test-Path '%ROOT%\com2-stage.log'){$l=(Get-Content '%ROOT%\com2-stage.log' -Tail 20)-join ' | ';Add-Content '%P%' ('com2_log='+$l)}"
+          type "%P%"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ci-proof\fold8-v4-diagnose.txt
-          git commit -m "ci: publish Fold8 v4 diagnosis" || exit /b 0
+          git add "%P%"
+          git commit -m "ci: publish Fold8 stage diagnosis" || exit /b 0
           git push origin HEAD:com2-runner-probe-20260824
