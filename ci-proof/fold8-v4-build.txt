@@ -1,0 +1,2 @@
+commit=4896a0b18d18ca65a9fe15a9bf1cfb976109e672
+job_status=failure
