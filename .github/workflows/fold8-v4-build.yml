@@ -1,0 +1,80 @@
+name: Fold8 v4 Build
+
+on:
+  push:
+    branches: [fold8-v4-build-20260824]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct Fold8 source
+        shell: cmd
+        run: |
+          if not exist C:\actions-runner\com2-dev mkdir C:\actions-runner\com2-dev
+          copy /b fold8-deploy\v4\fold8.b64.00+fold8-deploy\v4\fold8.b64.01+fold8-deploy\v4\fold8.b64.02+fold8-deploy\v4\fold8.b64.03+fold8-deploy\v4\fold8.b64.04+fold8-deploy\v4\fold8.b64.05 C:\actions-runner\com2-dev\fold8.b64
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('C:\actions-runner\com2-dev\fold8-source.zip',[Convert]::FromBase64String([IO.File]::ReadAllText('C:\actions-runner\com2-dev\fold8.b64')))"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'C:\actions-runner\com2-dev\fold8-source.zip' -Algorithm SHA256).Hash.ToLowerInvariant(); Write-Host ('FOLD8_ZIP_SHA256='+$h); if($h -ne '9ad5c170a10dc014382ca5f76f7002a45b1cfc237b097a46121c8354d71d2392'){exit 10}"
+          if exist C:\actions-runner\com2-dev\fold8-work rmdir /s /q C:\actions-runner\com2-dev\fold8-work
+          mkdir C:\actions-runner\com2-dev\fold8-work
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath 'C:\actions-runner\com2-dev\fold8-source.zip' -DestinationPath 'C:\actions-runner\com2-dev\fold8-work' -Force"
+          echo FOLD8_SOURCE_OK
+
+      - name: Reconstruct COM2 sidecar
+        shell: cmd
+        run: |
+          copy /b com2-deploy\jar.b64.00+com2-deploy\jar.b64.01+com2-deploy\jar.b64.02+com2-deploy\jar.b64.03+com2-deploy\jar.b64.04 C:\actions-runner\com2-dev\com2-jar.b64
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('C:\actions-runner\com2-dev\COM2DevServer.jar',[Convert]::FromBase64String([IO.File]::ReadAllText('C:\actions-runner\com2-dev\com2-jar.b64')))"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'C:\actions-runner\com2-dev\COM2DevServer.jar' -Algorithm SHA256).Hash.ToLowerInvariant(); Write-Host ('COM2_JAR_SHA256='+$h); if($h -ne 'fe87a8b8b08b44b917cc6a98bec4f13c893679c6cf868e717c635d2c56645453'){exit 11}"
+
+      - name: Install Gradle 9.1
+        shell: cmd
+        run: |
+          if exist C:\actions-runner\com2-dev\gradle-9.1.0-dist rmdir /s /q C:\actions-runner\com2-dev\gradle-9.1.0-dist
+          mkdir C:\actions-runner\com2-dev\gradle-9.1.0-dist
+          curl.exe -fL --retry 2 -o C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip https://services.gradle.org/distributions/gradle-9.1.0-bin.zip
+          curl.exe -fL --retry 2 -o C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip.sha256 https://services.gradle.org/distributions/gradle-9.1.0-bin.zip.sha256
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$exp=(Get-Content 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip.sha256' -Raw).Trim().Split(' ')[0].ToLowerInvariant(); $got=(Get-FileHash 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip' -Algorithm SHA256).Hash.ToLowerInvariant(); Write-Host ('GRADLE_EXPECTED='+$exp); Write-Host ('GRADLE_ACTUAL='+$got); if($got -ne $exp){exit 12}"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath 'C:\actions-runner\com2-dev\gradle-9.1.0-bin.zip' -DestinationPath 'C:\actions-runner\com2-dev\gradle-9.1.0-dist' -Force"
+          C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat --version
+
+      - name: Build through COM2
+        shell: cmd
+        run: |
+          set "JAVA_HOME=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64"
+          set "ANDROID_HOME=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          set "ANDROID_SDK_ROOT=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          set "COM2_BIND_HOST=127.0.0.1"
+          set "COM2_PORT=8767"
+          set "COM2_ALLOWED_ROOTS=C:\actions-runner\com2-dev"
+          start "" /b "%JAVA_HOME%\bin\java.exe" -jar C:\actions-runner\com2-dev\COM2DevServer.jar > C:\actions-runner\com2-dev\com2-build.log 2>&1
+          ping 127.0.0.1 -n 3 >nul
+          curl.exe -fsS http://127.0.0.1:8767/healthz
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$body=@{jsonrpc='2.0';id=1;method='tools/call';params=@{name='run_command';arguments=@{command='\"C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat\" --no-daemon clean assembleDebug';working_directory='C:\actions-runner\com2-dev\fold8-work';timeout_ms=900000}}}|ConvertTo-Json -Depth 8 -Compress; [IO.File]::WriteAllText('C:\actions-runner\com2-dev\build-request.json',$body)"
+          curl.exe -fsS -H "Content-Type: application/json" --data-binary "@C:\actions-runner\com2-dev\build-request.json" http://127.0.0.1:8767/mcp > C:\actions-runner\com2-dev\build-response.json
+          type C:\actions-runner\com2-dev\build-response.json
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$r=Get-Content 'C:\actions-runner\com2-dev\build-response.json' -Raw|ConvertFrom-Json; if($r.result.isError){Write-Error $r.result.content[0].text; exit 13}; Write-Host 'COM2_BUILD_CALL_OK'"
+
+      - name: Verify APK and COM2 hash
+        shell: cmd
+        run: |
+          set "APK=C:\actions-runner\com2-dev\fold8-work\app\build\outputs\apk\debug\app-debug.apk"
+          if not exist "%APK%" exit /b 20
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'C:\actions-runner\com2-dev\fold8-work\app\build\outputs\apk\debug\app-debug.apk' -Algorithm SHA256).Hash.ToLowerInvariant(); [IO.File]::WriteAllText('C:\actions-runner\com2-dev\apk.sha256.txt',$h); Write-Host ('APK_SHA256='+$h)"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$body=@{jsonrpc='2.0';id=2;method='tools/call';params=@{name='get_file_hash';arguments=@{path='C:\actions-runner\com2-dev\fold8-work\app\build\outputs\apk\debug\app-debug.apk';algorithm='SHA-256'}}}|ConvertTo-Json -Depth 8 -Compress; [IO.File]::WriteAllText('C:\actions-runner\com2-dev\hash-request.json',$body)"
+          curl.exe -fsS -H "Content-Type: application/json" --data-binary "@C:\actions-runner\com2-dev\hash-request.json" http://127.0.0.1:8767/mcp > C:\actions-runner\com2-dev\hash-response.json
+          type C:\actions-runner\com2-dev\hash-response.json
+          echo FOLD8_COM2_E2E_OK
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fold8Launcher-alpha02-debug
+          path: C:\actions-runner\com2-dev\fold8-work\app\build\outputs\apk\debug\app-debug.apk
+          retention-days: 7
