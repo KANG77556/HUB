@@ -1,0 +1,12 @@
+commit=7ee6558037ef955c6717a973b185f10e1bd4e841
+java_exists=True
+sdk36_exists=True
+java_version=openjdk version "17.0.20" 2026-07-21 | OpenJDK Runtime Environment Temurin-17.0.20+8 (build 17.0.20+8) | OpenJDK 64-Bit Server VM Temurin-17.0.20+8 (build 17.0.20+8, mixed mode, sharing) | 
+gradle_version= | Welcome to Gradle 9.1.0! |  | Here are the highlights of this release: |  - Full Java 25 support
+ - Native task graph visualization
+ - Enhanced console output |  | For more details see https://docs.gradle.org/9.1.0/release-notes.html |  |  | ------------------------------------------------------------ | Gradle 9.1.0 | ------------------------------------------------------------ |  | Build time:    2025-09-18 13:05:56 UTC | Revision:      e45a8dbf2470c2e2474ccc25be9f49331406a07e |  | Kotlin:        2.2.0 | Groovy:        4.0.28 | Ant:           Apache Ant(TM) version 1.10.15 compiled on August 25 2024 | Launcher JVM:  17.0.20 (Eclipse Adoptium 17.0.20+8) | Daemon JVM:    C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64 (no JDK specified, using current Java home) | OS:            Windows 11 10.0 amd64 |  | 
+gradle_expected=a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806
+gradle_actual=a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806
+gradle_hash_match=True
+com2_health=ok
+com2_log=COM2 Dev Server 1.0.0 listening on http://127.0.0.1:8767/mcp | Allowed roots: [C:\actions-runner\com2-dev]
