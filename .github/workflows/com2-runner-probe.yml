@@ -7,7 +7,6 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/com2-runner-probe.yml'
-      - 'com2-deploy/**'
       - 'fold8-deploy/**'
   workflow_dispatch:
 
@@ -17,14 +16,12 @@ permissions:
 jobs:
   probe:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Locate Gradle 9.1 cache
+      - uses: actions/checkout@v4
+      - name: Rebuild Fold8 input and verify
         shell: cmd
         run: |
-          echo GRADLE_91_PROBE
-          if exist "C:\Users\USER\.gradle\wrapper\dists\gradle-9.1.0-all\f36z46sifdyepuwewyafe5rwl\gradle-9.1.0\bin\gradle.bat" echo GRADLE91_KNOWN=True
-          echo GRADLE_USER_SEARCH_BEGIN
-          for /r "C:\Users\USER\.gradle\wrapper\dists" %%F in (gradle.bat) do @echo %%F
-          echo GRADLE_USER_SEARCH_END
-          exit /b 0
+          echo FOLD8_INPUT_VERIFY
+          certutil -hashfile fold8-deploy\Fold8Launcher-build-input-fixed.zip SHA256 | findstr /i "9ad5c170a10dc014382ca5f76f7002a45b1cfc237b097a46121c8354d71d2392" >nul || exit /b 10
+          echo FOLD8_HASH_OK
