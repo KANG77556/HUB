@@ -13,38 +13,53 @@ permissions:
 jobs:
   diagnose:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Stage-by-stage diagnosis
+
+      - name: Reconstruct source and apply patch
         shell: cmd
+        continue-on-error: true
         run: |
           if not exist ci-proof mkdir ci-proof
+          set "P=ci-proof\fold8-v4-stage-diagnose.txt"
+          > "%P%" echo commit=${{ github.sha }}
+          set "ROOT=C:\actions-runner\com2-dev"
+          if exist "%ROOT%\fold8-work" rmdir /s /q "%ROOT%\fold8-work"
+          mkdir "%ROOT%\fold8-work"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%ROOT%\fold8-source.zip' -DestinationPath '%ROOT%\fold8-work' -Force"
+          echo extract_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File fold8-deploy\v4\apply-compile-fixes.ps1 -Root "%ROOT%\fold8-work" > "%ROOT%\patch.out" 2>&1
+          echo patch_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\patch.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('patch_output='+$o)"
+
+      - name: Direct Gradle build diagnosis
+        shell: cmd
+        continue-on-error: true
+        run: |
           set "P=ci-proof\fold8-v4-stage-diagnose.txt"
           set "ROOT=C:\actions-runner\com2-dev"
           set "JAVA_HOME=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64"
           set "ANDROID_HOME=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
-          > "%P%" echo commit=${{ github.sha }}
-          if exist "%JAVA_HOME%\bin\java.exe" (echo java_exists=True>>"%P%") else (echo java_exists=False>>"%P%")
-          if exist "%ANDROID_HOME%\platforms\android-36" (echo sdk36_exists=True>>"%P%") else (echo sdk36_exists=False>>"%P%")
-          "%JAVA_HOME%\bin\java.exe" -version > "%ROOT%\java-version.out" 2>&1
-          echo java_version_exit=%errorlevel%>>"%P%"
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\java-version.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('java_version='+$o)"
-          call "%ROOT%\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat" --version > "%ROOT%\gradle-version.out" 2>&1
-          echo gradle_version_exit=%errorlevel%>>"%P%"
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\gradle-version.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('gradle_version='+$o)"
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$exp=(Get-Content '%ROOT%\gradle-9.1.0-bin.zip.sha256' -Raw).Trim().Split(' ')[0].ToLowerInvariant();$got=(Get-FileHash '%ROOT%\gradle-9.1.0-bin.zip' -Algorithm SHA256).Hash.ToLowerInvariant();Add-Content '%P%' ('gradle_expected='+$exp);Add-Content '%P%' ('gradle_actual='+$got);Add-Content '%P%' ('gradle_hash_match='+($exp -eq $got))"
-          set "COM2_BIND_HOST=127.0.0.1"
-          set "COM2_PORT=8767"
-          set "COM2_ALLOWED_ROOTS=C:\actions-runner\com2-dev"
-          start "" /b "%JAVA_HOME%\bin\java.exe" -jar "%ROOT%\COM2DevServer.jar" > "%ROOT%\com2-stage.log" 2>&1
-          ping 127.0.0.1 -n 3 >nul
-          curl.exe -fsS http://127.0.0.1:8767/healthz > "%ROOT%\health.out" 2>&1
-          echo com2_health_exit=%errorlevel%>>"%P%"
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\health.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('com2_health='+$o); if(Test-Path '%ROOT%\com2-stage.log'){$l=(Get-Content '%ROOT%\com2-stage.log' -Tail 20)-join ' | ';Add-Content '%P%' ('com2_log='+$l)}"
-          type "%P%"
+          set "ANDROID_SDK_ROOT=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          cd /d "%ROOT%\fold8-work"
+          call "%ROOT%\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat" --no-daemon clean assembleDebug --stacktrace > "%ROOT%\direct-build.out" 2>&1
+          echo gradle_build_exit=%errorlevel%>>"%GITHUB_WORKSPACE%\%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%ROOT%\direct-build.out' -Tail 120) -join ' | '; Add-Content '%GITHUB_WORKSPACE%\%P%' ('gradle_tail='+$o)"
+          if exist "%ROOT%\fold8-work\app\build\outputs\apk\debug\app-debug.apk" (
+            echo apk_exists=True>>"%GITHUB_WORKSPACE%\%P%"
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash '%ROOT%\fold8-work\app\build\outputs\apk\debug\app-debug.apk' -Algorithm SHA256).Hash.ToLowerInvariant(); Add-Content '%GITHUB_WORKSPACE%\%P%' ('apk_sha256='+$h)"
+          ) else (
+            echo apk_exists=False>>"%GITHUB_WORKSPACE%\%P%"
+          )
+
+      - name: Publish diagnosis
+        if: always()
+        shell: cmd
+        run: |
+          type ci-proof\fold8-v4-stage-diagnose.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "%P%"
-          git commit -m "ci: publish Fold8 stage diagnosis" || exit /b 0
+          git add ci-proof\fold8-v4-stage-diagnose.txt
+          git commit -m "ci: publish Fold8 build diagnosis" || exit /b 0
           git push origin HEAD:com2-runner-probe-20260824
