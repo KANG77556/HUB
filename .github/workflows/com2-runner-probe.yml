@@ -17,8 +17,17 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 5
     steps:
-      - name: Probe runner
-        shell: cmd
+      - name: Probe runner and COM2 prerequisites
+        shell: powershell
         run: |
-          echo COM2_RUNNER_PROBE_OK
-          ver
+          Write-Output 'COM2_RUNNER_PROBE_OK'
+          Write-Output ('MACHINE=' + $env:COMPUTERNAME)
+          $jar = 'G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\dist\COM2DevServer-1.0.1-reproducible.jar'
+          $cutover = 'G:\내 드라이브\03_프로그램개발\COM2DevServer\JavaRuntime\scripts\windows\complete_install_and_cutover_v2.ps1'
+          $tunnel = Join-Path $env:LOCALAPPDATA 'ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml'
+          Write-Output ('JAR_EXISTS=' + (Test-Path -LiteralPath $jar))
+          Write-Output ('CUTOVER_EXISTS=' + (Test-Path -LiteralPath $cutover))
+          Write-Output ('TUNNEL_CONFIG_EXISTS=' + (Test-Path -LiteralPath $tunnel))
+          $java = Get-Command java.exe -ErrorAction SilentlyContinue
+          Write-Output ('JAVA_ON_PATH=' + [bool]$java)
+          if ($java) { & $java.Source -version }
