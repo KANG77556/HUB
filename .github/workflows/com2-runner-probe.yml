@@ -18,21 +18,11 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 5
     steps:
-      - name: Start COM2 sidecar for persistence test
+      - name: Verify persisted COM2 sidecar
         shell: cmd
         run: |
-          set "JAVA=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe"
-          set "DESTDIR=C:\actions-runner\com2-dev"
-          set "DEST=%DESTDIR%\COM2DevServer.jar"
-          if not exist "%JAVA%" exit /b 41
-          if not exist "%DEST%" exit /b 42
-          certutil -hashfile "%DEST%" SHA256 | findstr /i "fe87a8b8b08b44b917cc6a98bec4f13c893679c6cf868e717c635d2c56645453" >nul || exit /b 43
-          netstat -ano | findstr /r /c:":8767 .*LISTENING" >nul && exit /b 44
-          set "COM2_ALLOWED_ROOTS=%DESTDIR%"
-          set "COM2_BIND_HOST=127.0.0.1"
-          set "COM2_PORT=8767"
-          set RUNNER_TRACKING_ID=
-          start "" /b "%JAVA%" -jar "%DEST%" > "%DESTDIR%\server.log" 2>&1
-          timeout /t 2 /nobreak >nul
-          curl.exe -fsS http://127.0.0.1:8767/healthz | findstr /x "ok" >nul || exit /b 45
-          echo COM2_PERSISTENCE_START_OK
+          echo COM2_PERSISTENCE_PROBE
+          curl.exe -fsS http://127.0.0.1:8767/healthz | findstr /x "ok" >nul || exit /b 31
+          > "%RUNNER_TEMP%\tools-req.json" echo {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
+          curl.exe -fsS -H "Content-Type: application/json" --data-binary @"%RUNNER_TEMP%\tools-req.json" http://127.0.0.1:8767/mcp | findstr /c:"\"name\":\"get_file_hash\"" >nul || exit /b 32
+          echo COM2_PERSISTED_OK
