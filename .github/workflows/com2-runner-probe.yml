@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/com2-runner-probe.yml'
+      - 'com2-deploy/**'
   workflow_dispatch:
 
 permissions:
@@ -15,18 +16,37 @@ permissions:
 jobs:
   probe:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Inspect COM2 process metadata
+      - uses: actions/checkout@v4
+
+      - name: Validate COM2 sidecar on Windows
         shell: cmd
         run: |
-          echo COM2_RUNNER_PROBE_OK
-          echo MCP_BRIDGE_PROCESS_BEGIN
-          wmic process where "name='ChatGPT MCP Bridge.exe'" get ProcessId,ExecutablePath,CommandLine /format:list 2>nul
-          echo MCP_BRIDGE_PROCESS_END
-          echo TUNNEL_PROCESS_BEGIN
-          wmic process where "name='tunnel-client.exe'" get ProcessId,ExecutablePath,CommandLine /format:list 2>nul
-          echo TUNNEL_PROCESS_END
-          tasklist /v /fi "imagename eq ChatGPT MCP Bridge.exe"
-          tasklist /v /fi "imagename eq tunnel-client.exe"
-          exit /b 0
+          set "JAVA=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe"
+          set "SRC=%CD%\com2-deploy\COM2DevServer-1.0.1-reproducible.jar"
+          set "DESTDIR=C:\actions-runner\com2-dev"
+          set "DEST=%DESTDIR%\COM2DevServer.jar"
+          if not exist "%JAVA%" exit /b 11
+          if not exist "%SRC%" exit /b 12
+          certutil -hashfile "%SRC%" SHA256 | findstr /i "fe87a8b8b08b44b917cc6a98bec4f13c893679c6cf868e717c635d2c56645453" >nul || exit /b 13
+          if not exist "%DESTDIR%" mkdir "%DESTDIR%"
+          copy /y "%SRC%" "%DEST%" >nul || exit /b 14
+          set "COM2_ALLOWED_ROOTS=%DESTDIR%"
+          set "COM2_BIND_HOST=127.0.0.1"
+          set "COM2_PORT=8767"
+          netstat -ano | findstr /r /c:":8767 .*LISTENING" >nul && exit /b 15
+          start "" /b "%JAVA%" -jar "%DEST%" > "%RUNNER_TEMP%\com2-server.log" 2>&1
+          timeout /t 2 /nobreak >nul
+          curl.exe -fsS http://127.0.0.1:8767/healthz | findstr /x "ok" >nul || (type "%RUNNER_TEMP%\com2-server.log" & exit /b 21)
+          > "%RUNNER_TEMP%\tools-req.json" echo {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
+          curl.exe -fsS -H "Content-Type: application/json" --data-binary @"%RUNNER_TEMP%\tools-req.json" http://127.0.0.1:8767/mcp > "%RUNNER_TEMP%\tools-resp.json" || exit /b 22
+          for %%T in (ping list_directory read_file write_file file_exists run_command start_process read_process_output kill_process find_android_sdk get_dev_environment get_file_hash) do @findstr /c:"\"name\":\"%%T\"" "%RUNNER_TEMP%\tools-resp.json" >nul || exit /b 23
+          > "%RUNNER_TEMP%\write-req.json" echo {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_file","arguments":{"path":"C:\\actions-runner\\com2-dev\\probe.txt","content":"COM2_WINDOWS_OK","mode":"rewrite"}}}
+          curl.exe -fsS -H "Content-Type: application/json" --data-binary @"%RUNNER_TEMP%\write-req.json" http://127.0.0.1:8767/mcp | findstr /c:"\"isError\":false" >nul || exit /b 24
+          > "%RUNNER_TEMP%\read-req.json" echo {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{"path":"C:\\actions-runner\\com2-dev\\probe.txt"}}}
+          curl.exe -fsS -H "Content-Type: application/json" --data-binary @"%RUNNER_TEMP%\read-req.json" http://127.0.0.1:8767/mcp | findstr /c:"COM2_WINDOWS_OK" >nul || exit /b 25
+          > "%RUNNER_TEMP%\block-req.json" echo {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"shutdown /s /t 0","working_directory":"C:\\actions-runner\\com2-dev","timeout_ms":1000}}}
+          curl.exe -fsS -H "Content-Type: application/json" --data-binary @"%RUNNER_TEMP%\block-req.json" http://127.0.0.1:8767/mcp > "%RUNNER_TEMP%\block-resp.json" || exit /b 26
+          findstr /c:"\"isError\":true" "%RUNNER_TEMP%\block-resp.json" >nul || exit /b 27
+          echo COM2_WINDOWS_SIDECAR_VALIDATED
