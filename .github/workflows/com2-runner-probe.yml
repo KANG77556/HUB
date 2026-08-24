@@ -20,15 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate COM2 sidecar on Windows
+      - name: Rebuild and validate COM2 sidecar on Windows
         shell: cmd
         run: |
           set "JAVA=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe"
-          set "SRC=%CD%\com2-deploy\COM2DevServer-1.0.1-reproducible.jar"
+          set "B64=%RUNNER_TEMP%\com2-jar.b64"
+          set "SRC=%RUNNER_TEMP%\COM2DevServer.jar"
           set "DESTDIR=C:\actions-runner\com2-dev"
           set "DEST=%DESTDIR%\COM2DevServer.jar"
           if not exist "%JAVA%" exit /b 11
-          if not exist "%SRC%" exit /b 12
+          copy /b "%CD%\com2-deploy\jar.b64.00"+"%CD%\com2-deploy\jar.b64.01"+"%CD%\com2-deploy\jar.b64.02"+"%CD%\com2-deploy\jar.b64.03"+"%CD%\com2-deploy\jar.b64.04" "%B64%" >nul || exit /b 12
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('%SRC%',[Convert]::FromBase64String([IO.File]::ReadAllText('%B64%')))" || exit /b 12
           certutil -hashfile "%SRC%" SHA256 | findstr /i "fe87a8b8b08b44b917cc6a98bec4f13c893679c6cf868e717c635d2c56645453" >nul || exit /b 13
           if not exist "%DESTDIR%" mkdir "%DESTDIR%"
           copy /y "%SRC%" "%DEST%" >nul || exit /b 14
