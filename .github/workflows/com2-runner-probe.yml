@@ -17,17 +17,24 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 5
     steps:
-      - name: Probe local deployment paths
+      - name: Locate user-scoped COM2 assets
         shell: cmd
         run: |
           echo COM2_RUNNER_PROBE_OK
           echo MACHINE=%COMPUTERNAME%
-          echo USERPROFILE=%USERPROFILE%
-          whoami
-          for %%P in ("C:\Users\USER\AppData\Local\ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml" "C:\Users\1\AppData\Local\ChatGPTMcpBridge\tunnel\chatgpt-bridge.yaml") do @if exist %%~P (echo TUNNEL_CONFIG=%%~P)
-          for %%J in ("C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe" "C:\actions-runner\runner-03\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64\bin\java.exe" "C:\Program Files\Java\jdk-17\bin\java.exe") do @if exist %%~J (echo JAVA17=%%~J)
-          if exist "C:\Users\USER\Fold8Launcher" echo FOLD8_USER_EXISTS=True
-          if exist "C:\Users\1\Fold8Launcher" echo FOLD8_1_EXISTS=True
-          if exist "C:\Users\USER\ChatGPT-Workspace" echo WORKSPACE_USER_EXISTS=True
-          if exist "C:\Users\1\ChatGPT-Workspace" echo WORKSPACE_1_EXISTS=True
+          echo USERPROFILES_BEGIN
+          dir /b /ad C:\Users 2>nul
+          echo USERPROFILES_END
+          echo TUNNEL_SEARCH_BEGIN
+          dir /s /b C:\Users\chatgpt-bridge.yaml 2>nul
+          echo TUNNEL_SEARCH_END
+          echo FOLD8_SEARCH_BEGIN
+          dir /s /b /ad C:\Users\Fold8Launcher 2>nul
+          echo FOLD8_SEARCH_END
+          echo WORKSPACE_SEARCH_BEGIN
+          dir /s /b /ad C:\Users\ChatGPT-Workspace 2>nul
+          echo WORKSPACE_SEARCH_END
+          tasklist /fi "imagename eq ChatGPT MCP Bridge.exe"
+          tasklist /fi "imagename eq tunnel-client.exe"
+          tasklist /fi "imagename eq cloudflared.exe"
           exit /b 0
