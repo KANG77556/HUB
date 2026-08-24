@@ -1,0 +1,75 @@
+name: Fold8 v4 Build Fixed
+
+on:
+  push:
+    branches: [com2-runner-probe-20260824]
+    paths:
+      - '.github/workflows/fold8-v4-build-fixed.yml'
+      - 'fold8-deploy/v4/apply-compile-fixes.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct source
+        shell: cmd
+        run: |
+          if not exist C:\actions-runner\com2-dev mkdir C:\actions-runner\com2-dev
+          copy /b fold8-deploy\v4\fold8.b64.00+fold8-deploy\v4\fold8.b64.01+fold8-deploy\v4\fold8.b64.02+fold8-deploy\v4\fold8.b64.03+fold8-deploy\v4\fold8.b64.04+fold8-deploy\v4\fold8.b64.05 C:\actions-runner\com2-dev\fold8.b64
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('C:\actions-runner\com2-dev\fold8-source.zip',[Convert]::FromBase64String([IO.File]::ReadAllText('C:\actions-runner\com2-dev\fold8.b64')))"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'C:\actions-runner\com2-dev\fold8-source.zip' -Algorithm SHA256).Hash.ToLowerInvariant(); Write-Host ('FOLD8_ZIP_SHA256='+$h); if($h -ne '9ad5c170a10dc014382ca5f76f7002a45b1cfc237b097a46121c8354d71d2392'){exit 10}"
+          if exist C:\actions-runner\com2-dev\fold8-work rmdir /s /q C:\actions-runner\com2-dev\fold8-work
+          mkdir C:\actions-runner\com2-dev\fold8-work
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath 'C:\actions-runner\com2-dev\fold8-source.zip' -DestinationPath 'C:\actions-runner\com2-dev\fold8-work' -Force"
+
+      - name: Apply verified compile fixes
+        shell: cmd
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File fold8-deploy\v4\apply-compile-fixes.ps1 -Root C:\actions-runner\com2-dev\fold8-work
+
+      - name: Build APK
+        shell: cmd
+        run: |
+          set "JAVA_HOME=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64"
+          set "ANDROID_HOME=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          set "ANDROID_SDK_ROOT=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          cd /d C:\actions-runner\com2-dev\fold8-work
+          call C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat --no-daemon clean assembleDebug --stacktrace > C:\actions-runner\com2-dev\fold8-fixed-build.log 2>&1
+          if errorlevel 1 (type C:\actions-runner\com2-dev\fold8-fixed-build.log & exit /b 21)
+          type C:\actions-runner\com2-dev\fold8-fixed-build.log
+
+      - name: Verify APK
+        shell: cmd
+        run: |
+          set "APK=C:\actions-runner\com2-dev\fold8-work\app\build\outputs\apk\debug\app-debug.apk"
+          if not exist "%APK%" exit /b 22
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash $env:APK -Algorithm SHA256).Hash.ToLowerInvariant(); [IO.File]::WriteAllText('C:\actions-runner\com2-dev\apk-fixed.sha256.txt',$h); Write-Host ('APK_SHA256='+$h)"
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Fold8Launcher-alpha02-debug-fixed
+          path: C:\actions-runner\com2-dev\fold8-work\app\build\outputs\apk\debug\app-debug.apk
+          retention-days: 7
+
+      - name: Publish proof
+        if: always() && github.event_name == 'push'
+        shell: cmd
+        run: |
+          if not exist ci-proof mkdir ci-proof
+          echo commit=${{ github.sha }}> ci-proof\fold8-v4-fixed-build.txt
+          echo job_status=${{ job.status }}>> ci-proof\fold8-v4-fixed-build.txt
+          if exist C:\actions-runner\com2-dev\apk-fixed.sha256.txt for /f "usebackq delims=" %%H in ("C:\actions-runner\com2-dev\apk-fixed.sha256.txt") do echo apk_sha256=%%H>> ci-proof\fold8-v4-fixed-build.txt
+          if exist C:\actions-runner\com2-dev\fold8-fixed-build.log powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=(Get-Content 'C:\actions-runner\com2-dev\fold8-fixed-build.log' -Tail 60) -join ' | '; [IO.File]::AppendAllText('ci-proof\fold8-v4-fixed-build.txt',[Environment]::NewLine+'build_tail='+$s)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-proof\fold8-v4-fixed-build.txt
+          git commit -m "ci: publish Fold8 fixed build proof" || exit /b 0
+          git push origin HEAD:com2-runner-probe-20260824
