@@ -1,0 +1,1 @@
+Temporary CI inputs for Android AI Assistant v0.8.0. The branch restores the previously verified v0.7.0 source, verifies the compressed v0.8.0 patch SHA-256, applies it, runs Android unit tests, builds the debug APK, and verifies the APK archive. This branch is not intended to be merged.

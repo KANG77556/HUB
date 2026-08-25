@@ -1,0 +1,1 @@
+Build trigger for Android AI Assistant v0.8.0 reminders and calendar export APK.

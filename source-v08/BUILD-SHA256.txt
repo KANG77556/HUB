@@ -1,0 +1,3 @@
+v0.7.0 source tar.xz: 8b1a24932de2f406ebb9ea439ae79d145cf6eb64ee8692722b27add9d3ee0a16
+v0.8.0 patch.xz: 6bb43b8c6067718998d6ed99f8a2cb74aaa0c19879456728835d24ce2422c02e
+local v0.8.0 feature commit: 6a2949d

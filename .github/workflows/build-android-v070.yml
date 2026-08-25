@@ -1,0 +1,90 @@
+name: Build Android AI Assistant v0.8.0
+
+on:
+  push:
+    branches: [apk-build-v0.8.0-public]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle 8.14.3
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Restore verified v0.7.0 source
+        run: |
+          cat source-v07/part-*.b64 | tr -d '[:space:]' | base64 -d > /tmp/android-ai-assistant-v0.7.0.tar.xz
+          echo '8b1a24932de2f406ebb9ea439ae79d145cf6eb64ee8692722b27add9d3ee0a16  /tmp/android-ai-assistant-v0.7.0.tar.xz' | sha256sum -c -
+          mkdir -p workspace
+          tar -xJf /tmp/android-ai-assistant-v0.7.0.tar.xz -C workspace
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('workspace/android-ai-assistant/android-app/app/src/main/java/kr/co/assistant/localai/model/LocalModelManager.kt')
+          source = path.read_text()
+          old = 'preferences.getString(KEY_WORK_ID, null)?.let { runCatching(UUID::fromString).getOrNull() } ?: return null'
+          new = 'preferences.getString(KEY_WORK_ID, null)?.let { value -> runCatching { UUID.fromString(value) }.getOrNull() } ?: return null'
+          assert old in source
+          path.write_text(source.replace(old, new))
+          PY
+
+      - name: Verify and apply v0.8.0 patch
+        run: |
+          tr -d '[:space:]' < source-v08/changes-v070-to-v080.patch.xz.b64 | base64 -d > /tmp/changes-v070-to-v080.patch.xz
+          echo '6bb43b8c6067718998d6ed99f8a2cb74aaa0c19879456728835d24ce2422c02e  /tmp/changes-v070-to-v080.patch.xz' | sha256sum -c -
+          xz -dc /tmp/changes-v070-to-v080.patch.xz > /tmp/changes-v070-to-v080.patch
+          echo 'Checking patch...'
+          git apply --check --verbose --directory=workspace/android-ai-assistant /tmp/changes-v070-to-v080.patch
+          echo 'Applying patch...'
+          git apply --verbose --directory=workspace/android-ai-assistant /tmp/changes-v070-to-v080.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          content = Path('workspace/android-ai-assistant/android-app/app/build.gradle.kts').read_text()
+          assert 'versionCode = 8' in content
+          assert 'versionName = "0.8.0"' in content
+          print('v0.8.0 patch verification passed')
+          PY
+
+      - name: Run Android unit tests
+        working-directory: workspace/android-ai-assistant/android-app
+        run: gradle --no-daemon testDebugUnitTest
+
+      - name: Build debug APK
+        working-directory: workspace/android-ai-assistant/android-app
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify APK
+        run: |
+          APK='workspace/android-ai-assistant/android-app/app/build/outputs/apk/debug/app-debug.apk'
+          test -f "$APK"
+          unzip -t "$APK" >/dev/null
+          cp "$APK" Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk
+          sha256sum Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk | tee Android-AI-Assistant-v0.8.0-reminders-calendar-debug-SHA256.txt
+          ls -lh Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-AI-Assistant-v0.8.0-reminders-calendar-debug
+          path: |
+            Android-AI-Assistant-v0.8.0-reminders-calendar-debug.apk
+            Android-AI-Assistant-v0.8.0-reminders-calendar-debug-SHA256.txt
+          if-no-files-found: error
+          retention-days: 7
