@@ -38,6 +38,7 @@ jobs:
         shell: cmd
         run: |
           set "JAVA_HOME=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64"
+          set "PATH=%JAVA_HOME%\bin;%PATH%"
           set "ANDROID_HOME=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
           set "ANDROID_SDK_ROOT=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
           set "COM2_BIND_HOST=127.0.0.1"
