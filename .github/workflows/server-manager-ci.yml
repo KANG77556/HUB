@@ -1,0 +1,27 @@
+name: Server Manager CI
+
+on:
+  push:
+    paths:
+      - "apps/server-manager/**"
+      - ".github/workflows/server-manager-ci.yml"
+  pull_request:
+    paths:
+      - "apps/server-manager/**"
+      - ".github/workflows/server-manager-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore
+        run: dotnet restore apps/server-manager/SchoolWorkHub.ServerManager.sln
+      - name: Build
+        run: dotnet build apps/server-manager/SchoolWorkHub.ServerManager.sln --configuration Release --no-restore -warnaserror

@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["node", "electron"]
+  },
+  "include": [
+    "src/preload/**/*.ts",
+    "src/shared/**/*.ts",
+    "src/main/ipc/channels.ts",
+    "vite.preload.config.ts"
+  ]
+}
