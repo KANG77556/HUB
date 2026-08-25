@@ -1,0 +1,65 @@
+name: Fold8 v4 Diagnose
+
+on:
+  push:
+    branches: [com2-runner-probe-20260824]
+    paths:
+      - '.github/workflows/fold8-v4-diagnose.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct source in runner workspace
+        shell: cmd
+        run: |
+          if not exist ci-proof mkdir ci-proof
+          set "P=ci-proof\fold8-v4-stage-diagnose.txt"
+          > "%P%" echo commit=${{ github.sha }}
+          copy /b fold8-deploy\v4\fold8.b64.00+fold8-deploy\v4\fold8.b64.01+fold8-deploy\v4\fold8.b64.02+fold8-deploy\v4\fold8.b64.03+fold8-deploy\v4\fold8.b64.04+fold8-deploy\v4\fold8.b64.05 "%GITHUB_WORKSPACE%\fold8.b64"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('%GITHUB_WORKSPACE%\fold8-source.zip',[Convert]::FromBase64String([IO.File]::ReadAllText('%GITHUB_WORKSPACE%\fold8.b64')))"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash '%GITHUB_WORKSPACE%\fold8-source.zip' -Algorithm SHA256).Hash.ToLowerInvariant(); Add-Content '%P%' ('zip_sha256='+$h); if($h -ne '9ad5c170a10dc014382ca5f76f7002a45b1cfc237b097a46121c8354d71d2392'){exit 10}"
+          if exist "%GITHUB_WORKSPACE%\fold8-work" rmdir /s /q "%GITHUB_WORKSPACE%\fold8-work"
+          mkdir "%GITHUB_WORKSPACE%\fold8-work"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%GITHUB_WORKSPACE%\fold8-source.zip' -DestinationPath '%GITHUB_WORKSPACE%\fold8-work' -Force"
+          echo extract_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File fold8-deploy\v4\apply-compile-fixes.ps1 -Root "%GITHUB_WORKSPACE%\fold8-work" > "%GITHUB_WORKSPACE%\patch.out" 2>&1
+          echo patch_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%GITHUB_WORKSPACE%\patch.out' -Raw).Replace([Environment]::NewLine,' | '); Add-Content '%P%' ('patch_output='+$o)"
+
+      - name: Direct Gradle build in runner workspace
+        shell: cmd
+        continue-on-error: true
+        run: |
+          set "P=%GITHUB_WORKSPACE%\ci-proof\fold8-v4-stage-diagnose.txt"
+          set "JAVA_HOME=C:\actions-runner\runner-02\_work\_tool\Java_Temurin-Hotspot_jdk\17.0.20-8\x64"
+          set "ANDROID_HOME=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          set "ANDROID_SDK_ROOT=C:\actions-runner\runner-03\_work\_tool\android-sdk-36"
+          cd /d "%GITHUB_WORKSPACE%\fold8-work"
+          call C:\actions-runner\com2-dev\gradle-9.1.0-dist\gradle-9.1.0\bin\gradle.bat --no-daemon clean assembleDebug --stacktrace > "%GITHUB_WORKSPACE%\direct-build.out" 2>&1
+          echo gradle_build_exit=%errorlevel%>>"%P%"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$o=(Get-Content '%GITHUB_WORKSPACE%\direct-build.out' -Tail 120) -join ' | '; Add-Content '%P%' ('gradle_tail='+$o)"
+          if exist "%GITHUB_WORKSPACE%\fold8-work\app\build\outputs\apk\debug\app-debug.apk" (
+            echo apk_exists=True>>"%P%"
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash '%GITHUB_WORKSPACE%\fold8-work\app\build\outputs\apk\debug\app-debug.apk' -Algorithm SHA256).Hash.ToLowerInvariant(); Add-Content '%P%' ('apk_sha256='+$h)"
+          ) else (
+            echo apk_exists=False>>"%P%"
+          )
+
+      - name: Publish diagnosis
+        if: always()
+        shell: cmd
+        run: |
+          type ci-proof\fold8-v4-stage-diagnose.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-proof\fold8-v4-stage-diagnose.txt
+          git commit -m "ci: publish workspace Fold8 build diagnosis" || exit /b 0
+          git push origin HEAD:com2-runner-probe-20260824

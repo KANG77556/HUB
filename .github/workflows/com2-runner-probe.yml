@@ -1,0 +1,27 @@
+name: COM2 Runner Probe
+
+on:
+  push:
+    branches: [com2-runner-probe-20260824]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/com2-runner-probe.yml'
+      - 'fold8-deploy/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild Fold8 input and verify
+        shell: cmd
+        run: |
+          echo FOLD8_INPUT_VERIFY
+          certutil -hashfile fold8-deploy\Fold8Launcher-build-input-fixed.zip SHA256 | findstr /i "9ad5c170a10dc014382ca5f76f7002a45b1cfc237b097a46121c8354d71d2392" >nul || exit /b 10
+          echo FOLD8_HASH_OK
