@@ -8,6 +8,10 @@ on:
       - '.github/workflows/build-watchface.yml'
   workflow_dispatch:
 
+concurrency:
+  group: artifact-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,9 +34,11 @@ jobs:
         run: gradle :mobile:assembleDebug :wear:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: premium-watchface-mobile-apk
           path: wearos-navitimer-watchface/mobile/build/outputs/apk/debug/mobile-debug.apk
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: premium-watchface-wear-apk
           path: wearos-navitimer-watchface/wear/build/outputs/apk/debug/wear-debug.apk
